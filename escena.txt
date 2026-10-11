@@ -1,0 +1,47 @@
+# ============================================================
+# escena.txt - descripcion de la escena (formato del grupo)
+#
+#   resolucion <ancho> <alto>
+#   ojo        <x> <y> <z>
+#   ventana    <xmin> <ymin> <xmax> <ymax>
+#   fondo      <r> <g> <b>
+#   esfera     <cx> <cy> <cz> <radio> <r> <g> <b>   (minimo 8)
+#   fin
+#
+# Colores en [0, 1]. Los valores usan notacion decimal C.
+# ============================================================
+
+resolucion 1008 567
+
+# El ojo mira hacia +Z; la ventana queda en z = 0 con aspecto 16:9.
+ojo 0 0 -5
+ventana -1.6 -0.9 1.6 0.9
+
+# Color de fondo (azul oscuro)
+fondo 0.05 0.05 0.15
+
+# --- Esferas de la escena (10) ---
+
+# Grande, al centro atras
+esfera 0.0  0.0   3.0  1.60  0.85 0.15 0.15
+
+# Izquierda
+esfera -2.2 0.2   4.5  0.90  0.15 0.55 0.90
+esfera -1.4 -1.1  3.6  0.55  0.95 0.75 0.10
+
+# Derecha
+esfera  2.3 0.0   4.2  1.00  0.20 0.80 0.35
+esfera  1.5 -1.2  3.2  0.60  0.90 0.30 0.75
+
+# Superiores
+esfera -0.9  1.5  4.0  0.70  0.95 0.55 0.10
+esfera  0.9  1.6  5.0  0.85  0.30 0.85 0.90
+
+# Inferiores
+esfera -0.4 -1.6  5.5  0.80  0.60 0.35 0.95
+esfera  0.4 -1.5  2.6  0.50  0.95 0.90 0.30
+
+# Pequena, cerca de la camara
+esfera  2.6  1.3  2.2  0.45  0.98 0.98 0.98
+
+fin
