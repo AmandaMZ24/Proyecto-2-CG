@@ -1,22 +1,25 @@
-CC     = gcc
-CFLAGS = -std=c11 -Wall -Wextra -Wpedantic -O2
-LDFLAGS = -lm
-
-OBJS = main.o escena.o
-BIN  = raytracing
-
+CC = gcc
+CFLAGS = -std=c11 -O2 -Wall -Wextra -Wpedantic
+LDLIBS = -lm
+OBJS = main.o escena.o vectores.o raytracing.o framebuffer.o
+BIN = raytracing
 all: $(BIN)
-
 $(BIN): $(OBJS)
-	$(CC) $(CFLAGS) -o $@ $(OBJS) $(LDFLAGS)
-
-main.o: main.c escena.h objetos.h
-	$(CC) $(CFLAGS) -c main.c -o main.o
-
+	$(CC) $(CFLAGS) -o $@ $(OBJS) $(LDLIBS)
+main.o: main.c escena.h framebuffer.h objetos.h
 escena.o: escena.c escena.h objetos.h
-	$(CC) $(CFLAGS) -c escena.c -o escena.o
-
+vectores.o: vectores.c vectores.h objetos.h
+raytracing.o: raytracing.c raytracing.h vectores.h objetos.h
+framebuffer.o: framebuffer.c framebuffer.h raytracing.h objetos.h
 clean:
 	rm -f $(OBJS) $(BIN)
-
 .PHONY: all clean
+run: $(BIN)
+	./$(BIN) escena.txt imagen.avs
+	display imagen.avs
+
+jpg: $(BIN)
+	./$(BIN) escena.txt imagen.avs
+	magick imagen.avs -quality 100 imagen.jpg
+
+.PHONY: run jpg

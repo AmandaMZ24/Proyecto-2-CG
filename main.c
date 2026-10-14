@@ -12,27 +12,20 @@
  */
 #include <stdio.h>
 #include <stdlib.h>
-
 #include "escena.h"
+#include "framebuffer.h"
 
-int main(int argc, char **argv)
-{
-    const char *ruta = (argc > 1) ? argv[1] : "escena.txt";
+int main(int argc, char **argv) {
+    const char *ruta = argc > 1 ? argv[1] : "escena.txt";
+    const char *salida = argc > 2 ? argv[2] : "imagen.avs";
     Escena escena;
-    int ok;
-
-    ok = escena_leer(&escena, ruta);
-    if (!ok) {
-        fprintf(stderr, "Error en %s\n", escena_error(&escena));
+    if (!escena_leer(&escena, ruta)) {
+        fprintf(stderr, "Error leyendo escena: %s\n", escena_error(&escena));
         escena_liberar(&escena);
         return EXIT_FAILURE;
     }
-
-    printf("Escena \"%s\" cargada: %d objetos (%d esferas), "
-           "framebuffer %dx%d\n",
-           ruta, escena.num_objetos, escena_num_esferas(&escena),
-           escena.ancho, escena.alto);
-
+    int ok = guardar_avs(salida, &escena);
+    if (!ok) fprintf(stderr, "Error guardando imagen AVS: %s\n", salida);
     escena_liberar(&escena);
-    return EXIT_SUCCESS;
+    return ok ? EXIT_SUCCESS : EXIT_FAILURE;
 }
