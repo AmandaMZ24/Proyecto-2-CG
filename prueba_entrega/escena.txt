@@ -1,0 +1,61 @@
+# ============================================================
+# escena.txt - descripcion de la escena (formato del grupo)
+#
+#   resolucion <ancho> <alto>
+#   ojo        <x> <y> <z>
+#   ventana    <xmin> <ymin> <xmax> <ymax>
+#   fondo      <r> <g> <b>
+#   esfera     <cx> <cy> <cz> <radio> <r> <g> <b>   (minimo 8)
+#   fin
+#
+# Colores en [0, 1]. Los valores usan notacion decimal C.
+# ============================================================
+
+resolucion 1300 760
+
+# El ojo mira hacia +Z; la ventana queda en z = 0 con aspecto 16:9.
+ojo 0 0 -5
+ventana -3.2 -1.87 3.2 1.87
+
+# Color de fondo (azul oscuro)
+fondo 0.05 0.05 0.15
+
+# --- Composicion espacial: 10 esferas bien diferenciadas ---
+
+# Grande roja, zona izquierda-alta
+esfera -1.43 0.67 2.4 1.22  0.98 0.20 0.25
+
+# Azul grande, centro alto a la derecha: tapa parte de la roja
+esfera 0.63 0.79 1.65 1.17  0.12 0.48 0.97
+
+# Morada grande delante: conecta roja y azul
+esfera -0.65 -0.30 1.05 1.08  0.55 0.39 0.96
+
+# Rosa fucsia derecha: tapa una parte de la azul
+esfera 1.90 -0.26 1.02 0.60  0.94 0.13 0.57
+
+# Turquesa grande abajo a la derecha
+esfera 0.88 -1.48 2.70 1.08  0.11 0.77 0.77
+
+# Amarilla pequena arriba izquierda, delante de la roja
+esfera -1.95 1.53 0.65 0.40  1.00 0.89 0.12
+
+# Verde pequena entre la roja y la morada
+esfera -1.47 -0.18 0.20 0.36  0.27 0.91 0.22
+
+# Naranja pequena abajo izquierda
+esfera -1.92 -1.29 1.20 0.42  1.00 0.54 0.19
+
+# Azul profundo mediana debajo de la turquesa y la morada
+esfera -0.47 -1.78 3.10 0.84  0.26 0.42 0.86
+
+# Violeta pequena entre el centro y derecha
+esfera 1.25 -0.68 0.15 0.34  0.73 0.25 0.84
+
+# Arriba y derecha: coral
+esfera  2.55   1.50  2.5  0.78   0.97 0.39 0.32
+
+# Esfera pequena debajo a la derecha
+esfera  2.95  -2.05  3.0  0.42   0.98 0.96 0.89
+
+fin

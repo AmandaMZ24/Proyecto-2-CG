@@ -13,13 +13,10 @@ raytracing.o: raytracing.c raytracing.h vectores.h objetos.h
 framebuffer.o: framebuffer.c framebuffer.h raytracing.h objetos.h
 clean:
 	rm -f $(OBJS) $(BIN)
-.PHONY: all clean
 run: $(BIN)
 	./$(BIN) escena.txt imagen.avs
-	display imagen.avs
 
-jpg: $(BIN)
-	./$(BIN) escena.txt imagen.avs
+jpg:
 	magick imagen.avs -quality 100 imagen.jpg
 
-.PHONY: run jpg
+.PHONY: all clean run jpg

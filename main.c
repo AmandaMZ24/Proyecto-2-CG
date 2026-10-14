@@ -12,6 +12,9 @@
  */
 #include <stdio.h>
 #include <stdlib.h>
+#include <unistd.h>
+#include <sys/types.h>
+
 #include "escena.h"
 #include "framebuffer.h"
 
@@ -24,8 +27,33 @@ int main(int argc, char **argv) {
         escena_liberar(&escena);
         return EXIT_FAILURE;
     }
+    
+    /* Generar y guardar la imagen AVS */
     int ok = guardar_avs(salida, &escena);
-    if (!ok) fprintf(stderr, "Error guardando imagen AVS: %s\n", salida);
+
+    /* Liberar la memoria utilizada por la escena */
     escena_liberar(&escena);
-    return ok ? EXIT_SUCCESS : EXIT_FAILURE;
+
+    if (!ok){
+        fprintf(stderr, "Error guardando imagen AVS: %s\n", salida);
+        return EXIT_FAILURE;
+    }
+
+    /* Mostrar la imagen generada con ImageMagick */
+    pid_t pid = fork();
+
+    if (pid < 0){
+        fprintf(stderr, "Error al iniciar ImageMagick.\n");
+        return EXIT_FAILURE;
+    }
+
+    if (pid == 0){
+        execlp("display", "display", salida, (char *)NULL);
+
+        fprintf(stderr, "No se pudo ejecutar ImageMagick.\n");
+        _exit(EXIT_FAILURE);
+    }
+
+    return EXIT_SUCCESS;
 }
+
