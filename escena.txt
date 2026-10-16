@@ -20,6 +20,12 @@ ventana -3.2 -1.87 3.2 1.87
 # Color de fondo (azul oscuro)
 fondo 0.05 0.05 0.15
 
+# Luz principal: arriba a la izquierda
+luz -3.0 4.0 -2.0 1.0
+
+# Luz secundaria: arriba a la derecha
+luz 4.0 2.0 -1.0 0.5
+
 # --- Composicion espacial: 10 esferas bien diferenciadas ---
 
 # Grande roja, zona izquierda-alta

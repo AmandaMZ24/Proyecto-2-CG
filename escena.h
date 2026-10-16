@@ -60,6 +60,9 @@ const char *escena_error(const Escena *escena);
 /* Agrega una esfera a la escena. Devuelve 1 si tuvo exito, 0 si no. */
 int escena_agregar_esfera(Escena *escena, Vec3 centro, double radio, Color color);
 
+/* Agrega una fuente de luz a la escena */
+int escena_agregar_luz(Escena *escena, Vec3 posicion, double intensidad);
+
 /* Numero de esferas almacenadas (para escenas con mas tipos en el futuro). */
 int escena_num_esferas(const Escena *escena);
 

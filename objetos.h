@@ -26,6 +26,11 @@ typedef struct {
     double b;
 } Color;
 
+typedef struct {
+    Vec3 posicion;
+    double intensidad;
+} Luz;
+
 /* ------------------------------------------------------------------ */
 /* Tipos de objeto                                                     */
 /* ------------------------------------------------------------------ */
@@ -83,6 +88,11 @@ typedef struct {
     Objeto *objetos;      /* arreglo dinamico de objetos            */
     int     num_objetos;
     int     cap_objetos;
+    
+    /* Fuentes de luz de la escena */
+    Luz *luces;
+    int num_luces;
+    int cap_luces;
 
     char error[256];      /* descripcion del ultimo error de lectura */
 } Escena;
