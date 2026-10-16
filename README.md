@@ -152,5 +152,5 @@ Para eliminar el ejecutable y los archivos objeto:
 ## Integrantes
 
 - Eliab Moises Hernandez Lopez
-- [Nombre completo - Integrante 2]
-- [Nombre completo - Integrante 3]
+- Priscila Loaiza Sanchez
+- Amanda Montero Zúñiga
