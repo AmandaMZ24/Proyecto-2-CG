@@ -108,83 +108,44 @@ if (esfera_golpeada != NULL)
 
 
 
-    /* ==========================================
-   ILUMINACION CON FUENTES DE LA ESCENA
+   /* ==========================================
+   ILUMINACION DIFUSA - LEY DE LAMBERT
    ========================================== */
+
+    /* Posicion de la fuente de luz */
+    Vec3 posicion_luz = {-3.0, 4.0, -2.0};
+
+    /* Vector desde la interseccion hacia la luz */
+    Vec3 vector_luz = vec_restar(
+        posicion_luz,
+        punto_interseccion
+    );
+
+    /* Vector unitario hacia la luz */
+    Vec3 L = vec_normalizar(vector_luz);
 
     /* Coeficiente de reflexion difusa */
     double Kd = 0.8;
 
-    /* Iluminacion ambiental */
-    double Ka = 0.3;
-    double Ia = 0.5;
+    /* Intensidad de la fuente luminosa */
+    double Ip = 1.0;
 
-    /* Coeficientes de atenuacion */
-    double C1 = 1.0;
-    double C2 = 0.05;
-    double C3 = 0.01;
+    /* Producto punto entre normal y luz */
+    double producto_NL = vec_punto(normal, L);
 
-    /* Inicializar con iluminacion ambiental */
-    double intensidad_total = Ka * Ia;
-
-    /* Recorrer las fuentes cargadas desde escena.txt */
-    for (int k = 0; k < escena->num_luces; k++)
+    /* Evitar intensidades negativas */
+    if (producto_NL < 0.0)
     {
-        /* Obtener la fuente de luz actual */
-        const Luz *luz = &escena->luces[k];
-
-        /* Vector desde el punto de impacto hacia la luz */
-        Vec3 vector_luz = vec_restar(
-            luz->posicion,
-            punto_interseccion
-        );
-
-        /* Distancia entre la interseccion y la fuente */
-        double distancia_luz = vec_longitud(vector_luz);
-
-        /* Evitar division entre cero */
-        if (distancia_luz <= 0.0)
-        {
-            continue;
-        }
-
-        /* Vector unitario hacia la fuente */
-        Vec3 L = vec_normalizar(vector_luz);
-
-        /* Ley de Lambert */
-        double producto_NL = vec_punto(normal, L);
-
-        /* Ignorar iluminacion negativa */
-        if (producto_NL <= 0.0)
-        {
-            continue;
-        }
-
-        /* Atenuacion por distancia */
-        double denominador = C1
-                        + C2 * distancia_luz
-                        + C3 * distancia_luz * distancia_luz;
-
-        double Fatt = fmin(1.0, 1.0 / denominador);
-
-        /* Intensidad difusa de esta fuente */
-        double intensidad_difusa =
-            producto_NL *
-            Kd *
-            luz->intensidad *
-            Fatt;
-
-        /* Acumular iluminacion */
-        intensidad_total += intensidad_difusa;
+        producto_NL = 0.0;
     }
 
-    /* Limitar la intensidad maxima */
-    intensidad_total = fmin(1.0, intensidad_total);
+    /* Calcular iluminacion difusa */
+    double intensidad = Kd * Ip * producto_NL;
 
-    /* Aplicar iluminacion al color de la esfera */
-    color.r = esfera_golpeada->color.r * intensidad_total;
-    color.g = esfera_golpeada->color.g * intensidad_total;
-    color.b = esfera_golpeada->color.b * intensidad_total;
+    /* Aplicar iluminacion al color original */
+    color.r = esfera_golpeada->color.r * intensidad;
+    color.g = esfera_golpeada->color.g * intensidad;
+    color.b = esfera_golpeada->color.b * intensidad;
 }
 
     return color;

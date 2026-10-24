@@ -11,9 +11,11 @@ El programa genera una escena tridimensional compuesta
 únicamente por esferas de diferentes tamaños, posiciones
 y colores.
 
-No se implementan modelos de iluminación, sombras ni
-reflejos. Las esferas se representan mediante círculos
-de colores sólidos.
+Se implementa iluminación difusa mediante la ley de Lambert, 
+permitiendo representar las esferas con diferentes intensidades 
+de color según la orientación de su superficie respecto a una fuente de luz.
+
+No se implementan iluminación ambiental, sombras ni reflejos.
 
 La imagen se genera con una resolución de 1300 x 760
 píxeles y se almacena en formato AVS.
@@ -34,8 +36,10 @@ los algoritmos de Ray Tracing.
 - main.c: coordina la ejecución del programa.
 - escena.c / escena.h: lectura y validación de la escena.
 - objetos.h: estructuras de los objetos y colores.
-- vectores.c / vectores.h: operaciones vectoriales.
-- raytracing.c / raytracing.h: intersección rayo-esfera.
+- vectores.c / vectores.h: operaciones vectoriales, cálculo 
+de longitud y normalización.
+- raytracing.c / raytracing.h: intersección rayo-esfera y 
+cálculo de iluminación difusa mediante Lambert.
 - framebuffer.c / framebuffer.h: generación de archivos AVS.
 - escena.txt: descripción de la escena.
 - Makefile: compilación y ejecución del proyecto.
@@ -112,10 +116,51 @@ una resolución de 1300 x 760 píxeles.
 3. Se genera un rayo desde el ojo hacia cada píxel.
 4. Se calculan las intersecciones con las esferas.
 5. Se selecciona la esfera visible más cercana.
-6. Se asigna su color o el color de fondo.
-7. Se convierte el color al formato de 8 bits.
-8. Se escribe la imagen en formato AVS.
-9. Se muestra la imagen mediante ImageMagick.
+6. Se calcula el punto de intersección del rayo con la esfera.
+7. Se obtiene el vector normal unitario de la superficie.
+8. Se calcula el vector unitario hacia la fuente de luz.
+9. Se aplica la ley de Lambert para obtener la intensidad difusa.
+10. Se modifica el color original de la esfera según la intensidad calculada.
+11. Se convierte el color al formato de 8 bits.
+12. Se escribe la imagen en formato AVS.
+13. Se muestra la imagen mediante ImageMagick.
+
+
+## Iluminación difusa
+
+El proyecto incorpora iluminación difusa mediante la ley de Lambert, permitiendo que las esferas presenten una apariencia tridimensional en lugar de colores sólidos.
+
+Para calcular la iluminación, primero se determina el punto de intersección entre el rayo y la esfera:
+
+P = E + tD
+
+Posteriormente, se calcula el vector normal unitario de la superficie:
+
+N = (P - C) / ||P - C||
+
+Se obtiene el vector unitario dirigido hacia la fuente de luz:
+
+L = (F - P) / ||F - P||
+
+Finalmente, se aplica la ley de Lambert:
+
+I = Kd * Ip * max(0, N · L)
+
+Donde:
+
+- Kd: coeficiente de reflexión difusa (0.8).
+- Ip: intensidad de la fuente luminosa (1.0).
+- N: vector normal unitario de la superficie.
+- L: vector unitario hacia la fuente de luz.
+- I: intensidad difusa resultante.
+
+Se utiliza una fuente de luz ubicada en las coordenadas (-3.0, 4.0, -2.0).
+
+La intensidad calculada se multiplica por los componentes RGB del color original de cada esfera.
+
+Esto genera superficies más iluminadas cuando están orientadas hacia la fuente de luz y zonas oscuras cuando la luz no incide directamente.
+
+No se implementan iluminación ambiental, atenuación por distancia ni múltiples fuentes luminosas.
 
 ## Formato AVS
 
@@ -144,7 +189,11 @@ Para eliminar el ejecutable y los archivos objeto:
 - Todo el código del proyecto está desarrollado en C.
 - Los algoritmos gráficos son implementaciones propias.
 - No se utilizan bibliotecas gráficas para Ray Tracing.
-- No se implementa iluminación.
+- Se implementa iluminación difusa mediante la ley de Lambert.
+- Se utiliza una fuente de luz puntual con posición e intensidad fijas.
+- No se implementan iluminación ambiental, atenuación por 
+distancia ni múltiples fuentes de luz.
+- No se calculan sombras proyectadas ni reflejos especulares.
 - Se utiliza memoria dinámica para almacenar las esferas.
 - El programa comprueba errores de lectura y escritura.
 - La estructura de objetos permite futuras ampliaciones.
