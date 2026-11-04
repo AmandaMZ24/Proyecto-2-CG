@@ -198,6 +198,10 @@ int escena_agregar_esfera(Escena *escena, Vec3 centro, double radio,
     return 1;
 }
 
+/*
+ * Agrega un poligono a la escena. Devuelve 1 si tuvo exito, 0 si no.
+ */
+
 int escena_agregar_poligono(
     Escena *escena,
     const Vec3 *vertices,
@@ -220,10 +224,20 @@ int escena_agregar_poligono(
         .color = color
     };
 
+    /* Validar aristas */
+    if (!validar_aristas(&temporal)) {
+        return 0;
+    }
+
     /* Validar coplanaridad*/
     if (!validar_coplanaridad(&temporal)) {
         return 0;
     }
+
+    /* Comprobar que el contorno no se cruce */
+    if (!validar_poligono_simple(&temporal)) {
+    return 0;
+}
 
     /* Calcular la normal del poligono */
     Vec3 normal;

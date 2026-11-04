@@ -266,12 +266,13 @@ int calcular_normal_poligono(
 
 
 /*
- * Determina si un rayo intersecta un poligono.
+ * Calcula la interseccion entre un rayo y un poligono.
  *
- * Retorna 1 si existe una interseccion valida.
- * Retorna 0 en caso contrario.
+ * Utiliza la normal previamente calculada
+ * cuando el poligono fue cargado a la escena.
  *
- * Guarda en t la distancia parametrica.
+ * Funciona para poligonos planos simples,
+ * tanto convexos como concavos.
  */
 int intersecar_poligono(
     Vec3 origen,
@@ -280,26 +281,40 @@ int intersecar_poligono(
     double *t
 )
 {
-    if (poligono == NULL || 
+    const double EPSILON = 1e-9;
+
+    if (poligono == NULL ||
         t == NULL ||
         poligono->vertices == NULL ||
         poligono->num_vertices < 3) {
         return 0;
     }
 
-    /* Calcular la normal del poligono */
-    Vec3 normal;
+    /*
+     * Obtener la normal almacenada.
+     * Esta normal se calculo al cargar el poligono.
+     */
+    Vec3 normal = poligono->normal;
 
-    if (!calcular_normal_poligono(poligono, &normal)) {
-        return 0;
+    /*
+     * Comprobar que la normal sea valida.
+     * Si es nula, intentamos calcularla.
+     *
+     * Este caso permite mantener compatibilidad
+     * con pruebas que crean poligonos manualmente.
+     */
+    if (vec_longitud(normal) <= EPSILON) {
+        if (!calcular_normal_poligono(poligono, &normal)) {
+            return 0;
+        }
     }
 
-    /* Obtener un punto del plano */
+    /* Tomar el primer vertice como punto del plano */
     Vec3 punto_plano = poligono->vertices[0];
 
     double t_plano;
 
-    /*Comprobar intersección con el plano */
+    /* Calcular interseccion entre rayo y plano */
     if (!intersecar_plano(
             origen,
             direccion,
@@ -309,25 +324,36 @@ int intersecar_poligono(
         return 0;
     }
 
-    /* Calcular el punto de intersección */
+    /* Calcular el punto tridimensional de impacto */
     Vec3 punto = vec_sumar(
         origen,
         vec_escalar(direccion, t_plano)
     );
 
-    /*Usamos una copia local porque punto_en_poligono utiliza el campo normal del poligono */
+    /*
+     * Crear una copia local de la estructura.
+     * No duplicamos los vertices, solamente
+     * copiamos la estructura que los referencia.
+     */
     Poligono poligono_local = *poligono;
+
+    /*
+     * Garantizar que la funcion punto_en_poligono
+     * reciba una normal valida.
+     */
     poligono_local.normal = normal;
 
-    /* Comprobar si el punto de intersección está dentro del polígono */
-    if (!punto_en_poligono(punto, &poligono_local)) {
+    /* Verificar que el impacto este dentro */
+    if (!punto_en_poligono(
+            punto,
+            &poligono_local)) {
         return 0;
     }
 
+    /* Guardar el parametro de interseccion */
     *t = t_plano;
 
     return 1;
-
 }
 
 /*
@@ -344,8 +370,8 @@ int validar_coplanaridad(
 {
     const double EPSILON = 1e-9;
 
-    if (poligono == NULL || 
-        poligono->vertices == NULL || 
+    if (poligono == NULL ||
+        poligono->vertices == NULL ||
         poligono->num_vertices < 3) {
         return 0;
     }
@@ -373,6 +399,233 @@ int validar_coplanaridad(
 
         if (distancia > EPSILON) {
             return 0;
+        }
+    }
+
+    return 1;
+}
+
+/*Comprueba que un poligono no tenga
+ * aristas de longitud cero.
+ *
+ * Retorna 1 si todas las aristas son validas.
+ * Retorna 0 si encuentra una arista degenerada.
+ */
+int validar_aristas(
+    const Poligono *poligono
+)
+{
+    const double EPSILON = 1e-9;
+
+    if (poligono == NULL ||
+        poligono->vertices == NULL ||
+        poligono->num_vertices < 3) {
+        return 0;
+    }
+
+    /* Verificar cada par de vertices consecutivos */
+    for (int i = 0; i < poligono->num_vertices; i++)
+    {
+        int siguiente = (i + 1) % poligono->num_vertices;
+
+        Vec3 diferencia = vec_restar(
+            poligono->vertices[siguiente],
+            poligono->vertices[i]
+        );
+
+        double longitud = vec_longitud(diferencia);
+
+        if (!isfinite(longitud) || longitud <= EPSILON) {
+            return 0;
+        }
+    }
+
+    return 1;
+}
+
+/*
+ * Calcula la orientacion de tres puntos 2D.
+ *
+ * Positivo: giro antihorario.
+ * Negativo: giro horario.
+ * Cero: puntos colineales.
+ */
+static double orientacion_2d(
+    double ax, double ay,
+    double bx, double by,
+    double cx, double cy
+)
+{
+    return (bx - ax) * (cy - ay)
+         - (by - ay) * (cx - ax);
+}
+
+/*
+ * Determina si dos segmentos 2D se intersectan.
+ *
+ * Incluye cruces, contactos en extremos
+ * y segmentos colineales superpuestos.
+ */
+static int segmentos_intersectan(
+    double ax, double ay,
+    double bx, double by,
+    double cx, double cy,
+    double dx, double dy
+)
+{
+    const double EPSILON = 1e-9;
+
+    double o1 = orientacion_2d(
+        ax, ay, bx, by, cx, cy
+    );
+
+    double o2 = orientacion_2d(
+        ax, ay, bx, by, dx, dy
+    );
+
+    double o3 = orientacion_2d(
+        cx, cy, dx, dy, ax, ay
+    );
+
+    double o4 = orientacion_2d(
+        cx, cy, dx, dy, bx, by
+    );
+
+    /*
+     * Caso general:
+     * los extremos de cada segmento se encuentran
+     * en lados opuestos del otro segmento.
+     */
+    int cruza_primero =
+        (o1 > EPSILON && o2 < -EPSILON) ||
+        (o1 < -EPSILON && o2 > EPSILON);
+
+    int cruza_segundo =
+        (o3 > EPSILON && o4 < -EPSILON) ||
+        (o3 < -EPSILON && o4 > EPSILON);
+
+    if (cruza_primero && cruza_segundo) {
+        return 1;
+    }
+
+    /* Casos especiales: puntos sobre segmentos */
+    if (fabs(o1) <= EPSILON &&
+        punto_en_segmento(cx, cy, ax, ay, bx, by)) {
+        return 1;
+    }
+
+    if (fabs(o2) <= EPSILON &&
+        punto_en_segmento(dx, dy, ax, ay, bx, by)) {
+        return 1;
+    }
+
+    if (fabs(o3) <= EPSILON &&
+        punto_en_segmento(ax, ay, cx, cy, dx, dy)) {
+        return 1;
+    }
+
+    if (fabs(o4) <= EPSILON &&
+        punto_en_segmento(bx, by, cx, cy, dx, dy)) {
+        return 1;
+    }
+
+    return 0;
+}
+
+int validar_poligono_simple(
+    const Poligono *poligono
+)
+{
+    if (poligono == NULL ||
+        poligono->vertices == NULL ||
+        poligono->num_vertices < 3) {
+        return 0;
+    }
+
+    int n = poligono->num_vertices;
+
+    Vec3 normal;
+
+    if (!calcular_normal_poligono(
+            poligono, &normal)) {
+        return 0;
+    }
+
+    /* Seleccionar el eje dominante de la normal */
+    double ax = fabs(normal.x);
+    double ay = fabs(normal.y);
+    double az = fabs(normal.z);
+
+    int eje;
+
+    if (ax >= ay && ax >= az) {
+        eje = 0;
+    }
+    else if (ay >= ax && ay >= az) {
+        eje = 1;
+    }
+    else {
+        eje = 2;
+    }
+
+    /*
+     * Comparar cada arista con las demas.
+     */
+    for (int i = 0; i < n; i++)
+    {
+        int siguiente_i = (i + 1) % n;
+
+        double aix, aiy;
+        double bix, biy;
+
+        proyectar_punto(
+            poligono->vertices[i],
+            eje,
+            &aix, &aiy
+        );
+
+        proyectar_punto(
+            poligono->vertices[siguiente_i],
+            eje,
+            &bix, &biy
+        );
+
+        for (int j = i + 1; j < n; j++)
+        {
+            int siguiente_j = (j + 1) % n;
+
+            /*
+             * No comparar aristas adyacentes:
+             * comparten un vertice por definicion.
+             */
+            if (j == i ||
+                j == siguiente_i ||
+                siguiente_j == i) {
+                continue;
+            }
+
+            double cjx, cjy;
+            double djx, djy;
+
+            proyectar_punto(
+                poligono->vertices[j],
+                eje,
+                &cjx, &cjy
+            );
+
+            proyectar_punto(
+                poligono->vertices[siguiente_j],
+                eje,
+                &djx, &djy
+            );
+
+            if (segmentos_intersectan(
+                    aix, aiy,
+                    bix, biy,
+                    cjx, cjy,
+                    djx, djy)) {
+                return 0;
+            }
         }
     }
 

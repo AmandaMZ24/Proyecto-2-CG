@@ -68,4 +68,27 @@ int validar_coplanaridad(
     const Poligono *poligono
 );
 
+/*
+ * Comprueba que un poligono no tenga
+ * aristas de longitud cero.
+ *
+ * Retorna 1 si todas las aristas son validas.
+ * Retorna 0 si encuentra una arista degenerada.
+ */
+int validar_aristas(
+    const Poligono *poligono
+);
+
+/*
+ * Verifica que las aristas de un poligono
+ * no se intersecten entre si.
+ *
+ * Retorna:
+ * 1 si el contorno es simple.
+ * 0 si hay autointersecciones.
+ */
+int validar_poligono_simple(
+    const Poligono *poligono
+);
+
 #endif

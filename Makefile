@@ -14,8 +14,10 @@ framebuffer.o: framebuffer.c framebuffer.h raytracing.h objetos.h
 poligonos.o: poligonos.c poligonos.h vectores.h objetos.h
 clean:
 	rm -f $(OBJS) $(BIN)
+ESCENA ?= escena_prueba_visual.txt
+
 run: $(BIN)
-	./$(BIN) escena.txt imagen.avs
+	./$(BIN) $(ESCENA) imagen.avs
 
 jpg:
 	magick imagen.avs -quality 100 imagen.jpg
