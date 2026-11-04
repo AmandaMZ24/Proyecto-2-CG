@@ -7,15 +7,18 @@
 Este proyecto implementa un sistema básico de Ray Tracing
 desarrollado en lenguaje C para Linux.
 
-El programa genera una escena tridimensional compuesta
-únicamente por esferas de diferentes tamaños, posiciones
-y colores.
+El programa genera una escena tridimensional compuesta por
+esferas y polígonos (convexos y cóncavos) de diferentes
+tamaños, posiciones, colores y materiales.
 
-Se implementa iluminación difusa mediante la ley de Lambert, 
-permitiendo representar las esferas con diferentes intensidades 
-de color según la orientación de su superficie respecto a una fuente de luz.
+El modelo de iluminación es completo:
 
-No se implementan iluminación ambiental, sombras ni reflejos.
+- Iluminación ambiental.
+- Reflexión difusa de Lambert.
+- Reflexión especular de Phong.
+- Múltiples fuentes luminosas con atenuación por distancia.
+- Sombras proyectadas.
+- Materiales propios para cada objeto.
 
 La imagen se genera con una resolución de 1300 x 760
 píxeles y se almacena en formato AVS.
@@ -35,13 +38,15 @@ los algoritmos de Ray Tracing.
 
 - main.c: coordina la ejecución del programa.
 - escena.c / escena.h: lectura y validación de la escena.
-- objetos.h: estructuras de los objetos y colores.
+- objetos.h: estructuras de los objetos, colores, luces y materiales.
 - vectores.c / vectores.h: operaciones vectoriales, cálculo 
 de longitud y normalización.
-- raytracing.c / raytracing.h: intersección rayo-esfera y 
-cálculo de iluminación difusa mediante Lambert.
+- raytracing.c / raytracing.h: intersecciones y modelo de
+iluminación completo (First_Intersection y De_Que_Color).
+- poligonos.c / poligonos.h: geometría e intersección de polígonos.
 - framebuffer.c / framebuffer.h: generación de archivos AVS.
-- escena.txt: descripción de la escena.
+- escena_materiales.txt: escena de prueba de sombras y materiales.
+- pruebas/prueba_iluminacion.c: prueba del modelo de iluminación.
 - Makefile: compilación y ejecución del proyecto.
 
 ## Compilación
@@ -83,7 +88,7 @@ El archivo resultante es imagen.jpg.
 
 ## Archivo de entrada
 
-El archivo escena.txt contiene la información
+El archivo de escena contiene la información
 necesaria para construir la escena.
 
 Su formato es:
@@ -92,7 +97,11 @@ Su formato es:
     ojo x y z
     ventana xmin ymin xmax ymax
     fondo r g b
-    esfera cx cy cz radio r g b
+    ambiente Ia
+    luz x y z intensidad
+    esfera cx cy cz radio r g b [ka kd ks kn]
+    poligono n x1 y1 z1 ... xn yn zn r g b [ka kd ks kn]
+    material ka kd ks kn
     fin
 
 Descripción de los parámetros:
@@ -101,66 +110,119 @@ Descripción de los parámetros:
 - ojo: posición del observador en el espacio.
 - ventana: límites del plano de proyección.
 - fondo: color utilizado cuando no hay intersecciones.
+- ambiente: intensidad de la iluminación ambiental, entre 0 y 1.
+- luz: posición e intensidad de cada fuente de luz.
 - esfera: centro, radio y color de cada esfera.
+- poligono: número de vértices, sus coordenadas y el color.
+  Admite polígonos convexos y cóncavos (mínimo 3 vértices).
+- material: coeficientes del material del objeto anterior.
 - fin: marca opcional de finalización del archivo.
 
 Los componentes de color utilizan valores entre 0 y 1.
 
-La escena actual contiene 12 esferas y utiliza
-una resolución de 1300 x 760 píxeles.
+### Materiales
+
+Cada objeto tiene su propio material, definido por cuatro
+coeficientes que pueden escribirse al final de la línea del
+objeto o, para reutilizarlos, en una línea `material` colocada
+después del objeto al que aplican:
+
+- ka: coeficiente de reflexión ambiental, entre 0 y 1.
+- kd: coeficiente de reflexión difusa, entre 0 y 1.
+- ks: coeficiente de reflexión especular, entre 0 y 1.
+- kn: exponente de brillo, mayor que cero (típico: 8 - 256).
+
+Si no se indican, se usan los valores por defecto
+(0.3, 0.8, 0.6, 48).
+
+Ejemplos:
+
+    esfera -1.43 0.67 2.4 1.22 0.98 0.20 0.25 0.20 0.70 0.90 128
+    poligono 4 -1 -1 -1  1 -1 -1  1 1 -1  -1 1 -1 1 0 0
+    material 0.40 0.90 0.05 8
 
 ## Funcionamiento general
 
 1. Se lee y valida el archivo de escena.
 2. Se recorren los píxeles de la imagen.
-3. Se genera un rayo desde el ojo hacia cada píxel.
-4. Se calculan las intersecciones con las esferas.
-5. Se selecciona la esfera visible más cercana.
-6. Se calcula el punto de intersección del rayo con la esfera.
-7. Se obtiene el vector normal unitario de la superficie.
-8. Se calcula el vector unitario hacia la fuente de luz.
-9. Se aplica la ley de Lambert para obtener la intensidad difusa.
-10. Se modifica el color original de la esfera según la intensidad calculada.
-11. Se convierte el color al formato de 8 bits.
-12. Se escribe la imagen en formato AVS.
-13. Se muestra la imagen mediante ImageMagick.
+3. Se genera un rayo desde el ojo hacia el centro de cada píxel.
+4. `First_Intersection` busca la intersección más cercana
+   con cualquier objeto (esfera o polígono).
+5. Si no hay intersección se devuelve el color de fondo.
+6. Se calcula el punto de intersección y su vector normal.
+7. Se consulta el color y el material del objeto golpeado.
+8. `De_Que_Color` aplica el modelo de iluminación completo.
+9. Se convierte el color al formato de 8 bits.
+10. Se escribe la imagen en formato AVS.
+11. Se muestra la imagen mediante ImageMagick.
 
+## Modelo de iluminación
 
-## Iluminación difusa
+Para cada punto de impacto P se suma la contribución de todas
+las fuentes de luz más el término ambiental:
 
-El proyecto incorpora iluminación difusa mediante la ley de Lambert, permitiendo que las esferas presenten una apariencia tridimensional en lugar de colores sólidos.
+    I = ka * Ia + Σ_luz [ kd * Ip * Fatt * (N · L) ]
+                    + Σ_luz [ ks * Ip * Fatt * (R · V)^kn ]
 
-Para calcular la iluminación, primero se determina el punto de intersección entre el rayo y la esfera:
+### Término ambiental
 
-P = E + tD
+    Iamb = ka * Ia
 
-Posteriormente, se calcula el vector normal unitario de la superficie:
+No depende de la normal ni de la luz, por lo que nunca recibe
+sombra. Ia se lee con la palabra clave `ambiente`.
 
-N = (P - C) / ||P - C||
+### Reflexión difusa (Lambert)
 
-Se obtiene el vector unitario dirigido hacia la fuente de luz:
+    Idif = kd * Ip * Fatt * max(0, N · L)
 
-L = (F - P) / ||F - P||
+- N: normal unitaria de la superficie en P.
+- L: vector unitario desde P hacia la fuente de luz.
+- kd: coeficiente difuso del material.
+- Ip: intensidad de la fuente de luz.
 
-Finalmente, se aplica la ley de Lambert:
+La normal se orienta siempre hacia el lado del que llega el rayo.
 
-I = Kd * Ip * max(0, N · L)
+### Atenuación por distancia
 
-Donde:
+    Fatt = min(1, 1 / (C1 + C2 * d + C3 * d²))
 
-- Kd: coeficiente de reflexión difusa (0.8).
-- Ip: intensidad de la fuente luminosa (1.0).
-- N: vector normal unitario de la superficie.
-- L: vector unitario hacia la fuente de luz.
-- I: intensidad difusa resultante.
+con C1 = 1.0, C2 = 0.02 y C3 = 0.004, y d la distancia entre
+el punto y la fuente de luz.
 
-Se utiliza una fuente de luz ubicada en las coordenadas (-3.0, 4.0, -2.0).
+### Reflexión especular (Phong)
 
-La intensidad calculada se multiplica por los componentes RGB del color original de cada esfera.
+    Iesp = ks * Ip * Fatt * (R · V)^kn
 
-Esto genera superficies más iluminadas cuando están orientadas hacia la fuente de luz y zonas oscuras cuando la luz no incide directamente.
+- R: reflexión de L respecto de N,
+  `R = 2 * (N · L) * N - L`.
+- V: vector unitario desde P hacia el ojo.
+- ks: coeficiente especular del material.
+- kn: exponente de brillo; cuanto mayor es, más concentrado
+  queda el brillo.
 
-No se implementan iluminación ambiental, atenuación por distancia ni múltiples fuentes luminosas.
+El término especular solo se calcula cuando N · L > 0 y
+R · V > 0. El color del brillo es blanco, ya que representa
+la luz de la fuente reflejada por la superficie.
+
+### Sombras
+
+Por cada fuente de luz se lanza un rayo de sombra desde el
+punto de impacto, desplazado una pequeña cantidad a lo largo
+de la normal para evitar auto-intersecciones, en la dirección
+de la luz:
+
+- Si algún objeto se encuentra entre el punto y la fuente,
+  esa luz no aporta ni difusa ni especular.
+- El término ambiental nunca se apaga.
+
+De este modo los objetos proyectan sombras sobre el suelo y
+sobre otros objetos.
+
+### Materiales
+
+Cada esfera y cada polígono tiene sus propios valores de
+ka, kd, ks y kn, de modo que unos objetos responden de forma
+mate y otros brillante con la misma iluminación.
 
 ## Formato AVS
 
@@ -184,18 +246,31 @@ Para eliminar el ejecutable y los archivos objeto:
 
     make clean
 
+## Pruebas
+
+Para ejecutar la prueba del modelo de iluminación:
+
+    make prueba
+
+La prueba verifica la lectura de materiales y de la luz
+ambiental, el funcionamiento de `First_Intersection` y
+`De_Que_Color`, las sombras proyectadas, la reflexión
+especular de Phong y las validaciones del archivo de escena.
+
 ## Consideraciones
 
 - Todo el código del proyecto está desarrollado en C.
 - Los algoritmos gráficos son implementaciones propias.
 - No se utilizan bibliotecas gráficas para Ray Tracing.
-- Se implementa iluminación difusa mediante la ley de Lambert.
-- Se utiliza una fuente de luz puntual con posición e intensidad fijas.
-- No se implementan iluminación ambiental, atenuación por 
-distancia ni múltiples fuentes de luz.
-- No se calculan sombras proyectadas ni reflejos especulares.
-- Se utiliza memoria dinámica para almacenar las esferas.
-- El programa comprueba errores de lectura y escritura.
+- Se implementa iluminación ambiental y difusa mediante Lambert.
+- Se implementa reflexión especular de Phong.
+- Se utilizan múltiples fuentes de luz con atenuación por 
+  distancia.
+- Se calculan sombras proyectadas sobre esferas y polígonos.
+- Cada objeto tiene su propio material (ka, kd, ks, kn).
+- Se usa memoria dinámica para almacenar los objetos.
+- El programa comprueba errores de lectura y escritura y no
+  imprime valores de depuración.
 - La estructura de objetos permite futuras ampliaciones.
 
 ## Integrantes

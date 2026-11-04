@@ -46,6 +46,12 @@ void escena_inicializar(Escena *escena)
     escena->fondo.g = 0.0;
     escena->fondo.b = 0.0;
 
+    /*
+     * Intensidad ambiental por defecto. Conserva el resultado del
+     * modelo original: Ka(0.3) * Ia(0.5) = 0.15.
+     */
+    escena->ambiente = 0.5;
+
     escena->cap_objetos = ESCENA_CAP_INICIAL;
     escena->objetos = (Objeto *)calloc((size_t)escena->cap_objetos,
     sizeof(Objeto));
@@ -156,17 +162,53 @@ static int arity_ok(Escena *e, int n, int esperados, int linea,
 }
 
 /* ------------------------------------------------------------------ */
+/* Materiales                                                          */
+/* ------------------------------------------------------------------ */
+
+void material_defecto(Material *material)
+{
+    if (material == NULL) {
+        return;
+    }
+
+    material->ka = MATERIAL_KA_DEFECTO;
+    material->kd = MATERIAL_KD_DEFECTO;
+    material->ks = MATERIAL_KS_DEFECTO;
+    material->kn = MATERIAL_KN_DEFECTO;
+}
+
+/*
+ * Valida los cuatro coeficientes de un material.
+ * Devuelve 1 si todos los valores son utilizables.
+ */
+static int material_valido(const Material *m)
+{
+    if (m == NULL) {
+        return 0;
+    }
+
+    if (!isfinite(m->ka) || m->ka < 0.0 || m->ka > 1.0 ||
+        !isfinite(m->kd) || m->kd < 0.0 || m->kd > 1.0 ||
+        !isfinite(m->ks) || m->ks < 0.0 || m->ks > 1.0 ||
+        !isfinite(m->kn) || m->kn <= 0.0) {
+        return 0;
+    }
+
+    return 1;
+}
+
+/* ------------------------------------------------------------------ */
 /* Carga de objetos                                                    */
 /* ------------------------------------------------------------------ */
 
 int escena_agregar_esfera(Escena *escena, Vec3 centro, double radio,
-                          Color color)
+                          Color color, Material material)
 {
     Objeto *nuevo;
     Objeto *crecido;
     int nueva_cap;
 
-    if (escena == NULL) {
+    if (escena == NULL || !material_valido(&material)) {
         return 0;
     }
 
@@ -187,6 +229,7 @@ int escena_agregar_esfera(Escena *escena, Vec3 centro, double radio,
     nuevo->u.esfera.centro = centro;
     nuevo->u.esfera.radio  = radio;
     nuevo->u.esfera.color  = color;
+    nuevo->u.esfera.material = material;
 
     escena->num_objetos++;
     return 1;
@@ -200,13 +243,15 @@ int escena_agregar_poligono(
     Escena *escena,
     const Vec3 *vertices,
     int num_vertices,
-    Color color
+    Color color,
+    Material material
 )
 {
     if (escena == NULL || 
         vertices == NULL || 
         num_vertices < 3 || 
-        num_vertices > ESCENA_MAX_VERTICES) {
+        num_vertices > ESCENA_MAX_VERTICES ||
+        !material_valido(&material)) {
         return 0;
     }
 
@@ -215,7 +260,8 @@ int escena_agregar_poligono(
         .vertices = (Vec3 *)vertices,
         .num_vertices = num_vertices,
         .normal = {0.0, 0.0, 0.0},
-        .color = color
+        .color = color,
+        .material = material
     };
 
     /* Validar aristas */
@@ -281,8 +327,37 @@ int escena_agregar_poligono(
     nuevo->u.poligono.num_vertices = num_vertices;
     nuevo->u.poligono.normal = normal;
     nuevo->u.poligono.color = color;
+    nuevo->u.poligono.material = material;
 
     escena->num_objetos++;
+
+    return 1;
+}
+
+/* =========================================================
+   APLICAR MATERIAL AL ULTIMO OBJETO
+   ========================================================= */
+
+int escena_aplicar_material(Escena *escena, Material material)
+{
+    if (escena == NULL ||
+        escena->num_objetos <= 0 ||
+        escena->objetos == NULL ||
+        !material_valido(&material)) {
+        return 0;
+    }
+
+    Objeto *ultimo = &escena->objetos[escena->num_objetos - 1];
+
+    if (ultimo->tipo == TIPO_ESFERA) {
+        ultimo->u.esfera.material = material;
+    }
+    else if (ultimo->tipo == TIPO_POLIGONO) {
+        ultimo->u.poligono.material = material;
+    }
+    else {
+        return 0;
+    }
 
     return 1;
 }
@@ -447,8 +522,57 @@ static int leer_cabecera(Escena *e, char *tokens[], int n, int linea,
         return 1;
     }
 
+    if (strcmp(tokens[0], "ambiente") == 0) {
+        if (!arity_ok(e, n, 2, linea, nombre, "ambiente")) return 0;
+        if (!a_doble(tokens[1], &v[0]) || v[0] < 0.0 || v[0] > 1.0) {
+            fijar_error(e, linea, nombre,
+                        "\"ambiente\" necesita una intensidad en [0, 1]");
+            return 0;
+        }
+        e->ambiente = v[0];
+        return 1;
+    }
+
     fijar_error(e, linea, nombre, "palabra clave desconocida");
     return 0;
+}
+
+/*
+ * Convierte los cuatro tokens de un material
+ * (`ka kd ks kn`) empezando en `inicio`.
+ * Devuelve 1 si los valores son validos.
+ */
+static int a_material(Escena *e, char *tokens[], int inicio, int linea,
+                      const char *nombre, const char *clave, Material *m)
+{
+    double v[4];
+
+    for (int i = 0; i < 4; i++) {
+        if (!a_doble(tokens[inicio + i], &v[i])) {
+            char motivo[160];
+            snprintf(motivo, sizeof(motivo),
+                     "\"%s\" necesita cuatro valores numericos "
+                     "(ka kd ks kn)", clave);
+            fijar_error(e, linea, nombre, motivo);
+            return 0;
+        }
+    }
+
+    m->ka = v[0];
+    m->kd = v[1];
+    m->ks = v[2];
+    m->kn = v[3];
+
+    if (!material_valido(m)) {
+        char motivo[160];
+        snprintf(motivo, sizeof(motivo),
+                 "material invalido en \"%s\": ka, kd y ks en [0, 1] "
+                 "y kn mayor que cero", clave);
+        fijar_error(e, linea, nombre, motivo);
+        return 0;
+    }
+
+    return 1;
 }
 
 static int leer_esfera(Escena *e, char *tokens[], int n, int linea,
@@ -457,9 +581,19 @@ static int leer_esfera(Escena *e, char *tokens[], int n, int linea,
     double v[7];
     Vec3   centro;
     Color  color;
+    Material material;
     int    i;
 
-    if (!arity_ok(e, n, 8, linea, nombre, "esfera")) return 0;
+    /*
+     * esfera cx cy cz radio r g b            -> 8 tokens
+     * esfera cx cy cz radio r g b ka kd ks kn -> 12 tokens
+     */
+    if (n != 8 && n != 12) {
+        fijar_error(e, linea, nombre,
+                    "\"esfera\" espera 7 argumentos "
+                    "(o 11 con material: ka kd ks kn)");
+        return 0;
+    }
 
     for (i = 0; i < 7; i++) {
         if (!a_doble(tokens[1 + i], &v[i])) {
@@ -481,6 +615,12 @@ static int leer_esfera(Escena *e, char *tokens[], int n, int linea,
         return 0;
     }
 
+    material_defecto(&material);
+
+    if (n == 12 && !a_material(e, tokens, 8, linea, nombre, "esfera", &material)) {
+        return 0;
+    }
+
     centro.x = v[0];
     centro.y = v[1];
     centro.z = v[2];
@@ -488,7 +628,7 @@ static int leer_esfera(Escena *e, char *tokens[], int n, int linea,
     color.g  = v[5];
     color.b  = v[6];
 
-    if (!escena_agregar_esfera(e, centro, v[3], color)) {
+    if (!escena_agregar_esfera(e, centro, v[3], color, material)) {
         fijar_error(e, linea, nombre, "no hay memoria para mas objetos");
         return 0;
     }
@@ -541,15 +681,17 @@ static int leer_esfera(Escena *e, char *tokens[], int n, int linea,
     1 token: cantidad de vertices
     3*N tokens: coordenadas de cada vertice
     3 tokens: color del poligono
+    4 tokens opcionales: material (ka kd ks kn)
     */
     int esperados = 2 + 3 * cantidad + 3;
 
-    if (n != esperados) {
+    if (n != esperados && n != esperados + 4) {
         fijar_error(
             e,
             linea,
             nombre,
-            "cantidad incorrecta de coordenadas para el poligono"
+            "cantidad incorrecta de coordenadas para el poligono "
+            "(color, o color mas material ka kd ks kn)"
         );
         return 0;
     }
@@ -602,12 +744,22 @@ static int leer_esfera(Escena *e, char *tokens[], int n, int linea,
         return 0;
     }
 
+    /* Material opcional al final de la linea */
+    Material material;
+    material_defecto(&material);
+
+    if (n == esperados + 4 &&
+        !a_material(e, tokens, esperados, linea, nombre, "poligono", &material)) {
+        return 0;
+    }
+
     /* Validar y agregar el poligono a la escena */
     if (!escena_agregar_poligono(
         e,
         vertices,
         cantidad,
-        color)) {
+        color,
+        material)) {
         
         fijar_error(
             e,
@@ -682,6 +834,55 @@ static int leer_luz(
             linea,
             nombre,
             "no se pudo agregar la fuente de luz"
+        );
+        return 0;
+    }
+
+    return 1;
+}
+
+
+/* =========================================================
+   LECTURA DE MATERIALES
+   =========================================================
+   Formato: material <ka> <kd> <ks> <kn>
+   Se coloca despues del objeto al que debe aplicarse.
+*/
+
+static int leer_material(
+    Escena *e,
+    char *tokens[],
+    int n,
+    int linea,
+    const char *nombre
+)
+{
+    Material material;
+
+    if (!arity_ok(e, n, 5, linea, nombre, "material")) {
+        return 0;
+    }
+
+    if (!a_material(e, tokens, 1, linea, nombre, "material", &material)) {
+        return 0;
+    }
+
+    if (e->num_objetos <= 0) {
+        fijar_error(
+            e,
+            linea,
+            nombre,
+            "\"material\" debe ir despues de un objeto"
+        );
+        return 0;
+    }
+
+    if (!escena_aplicar_material(e, material)) {
+        fijar_error(
+            e,
+            linea,
+            nombre,
+            "no se pudo aplicar el material"
         );
         return 0;
     }
@@ -779,6 +980,15 @@ int escena_leer_flujo(Escena *escena, FILE *flujo, const char *nombre)
         if (strcmp(tokens[0], "luz") == 0)
         {
             if (!leer_luz(escena, tokens, n, num_linea, nombre)){
+                return 0;
+            }
+            continue;
+        }
+
+        /* Asignar material al ultimo objeto leido */
+        if (strcmp(tokens[0], "material") == 0)
+        {
+            if (!leer_material(escena, tokens, n, num_linea, nombre)) {
                 return 0;
             }
             continue;

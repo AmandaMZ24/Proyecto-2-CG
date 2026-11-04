@@ -3,8 +3,16 @@
 #include <stddef.h>
 
 #include "raytracing.h"
+#include "escena.h"
 #include "vectores.h"
 #include "poligonos.h"
+
+/*
+ * Desplazamiento del origen de los rayos de sombra y de los rayos
+ * reflejados respecto a la superficie. Evita la auto-interseccion
+ * (self-shadowing) por errores de punto flotante.
+ */
+#define EPSILON_SUPERFICIE 1e-4
 
 /* Calcula un punto sobre el rayo: P(t) = origen + t * direccion */
 static Vec3 punto_en_rayo(Vec3 origen, Vec3 direccion, double t)
@@ -46,6 +54,294 @@ int intersecar_esfera(Vec3 origen, Vec3 direccion, const Esfera *esfera, double 
     return 0;
 }
 
+/*
+ * Interseccion de un rayo con un objeto cualquiera de la escena.
+ * Devuelve 1 si hay impacto hacia adelante y escribe t.
+ */
+static int intersecar_objeto(const Objeto *objeto, Vec3 origen,
+                             Vec3 direccion, double *t)
+{
+    if (objeto == NULL || t == NULL) {
+        return 0;
+    }
+
+    if (objeto->tipo == TIPO_ESFERA) {
+        return intersecar_esfera(origen, direccion, &objeto->u.esfera, t);
+    }
+
+    if (objeto->tipo == TIPO_POLIGONO) {
+        return intersecar_poligono(origen, direccion, &objeto->u.poligono, t);
+    }
+
+    return 0;
+}
+
+/* ================================================================== */
+/*  FIRST_INTERSECTION: objeto mas cercano golpeado por un rayo        */
+/* ================================================================== */
+
+int First_Intersection(const Escena *escena, Vec3 origen, Vec3 direccion,
+                       int *indice, double *t)
+{
+    double mejor_t = DBL_MAX;
+    int    mejor_i = -1;
+
+    if (escena == NULL || escena->objetos == NULL ||
+        escena->num_objetos <= 0) {
+        return 0;
+    }
+
+    for (int i = 0; i < escena->num_objetos; ++i)
+    {
+        double t_actual = 0.0;
+
+        if (intersecar_objeto(&escena->objetos[i], origen, direccion,
+                              &t_actual) &&
+            t_actual > 1e-9 &&
+            t_actual < mejor_t)
+        {
+            mejor_t = t_actual;
+            mejor_i = i;
+        }
+    }
+
+    if (mejor_i < 0) {
+        return 0;
+    }
+
+    if (indice != NULL) {
+        *indice = mejor_i;
+    }
+    if (t != NULL) {
+        *t = mejor_t;
+    }
+
+    return 1;
+}
+
+/* ================================================================== */
+/*  Datos geometricos del punto de impacto                             */
+/* ================================================================== */
+
+/*
+ * Obtiene la normal, el color base y el material del objeto golpeado.
+ * La normal siempre queda orientada hacia el lado del que llega el rayo.
+ */
+static void datos_de_impacto(const Objeto *objeto, Vec3 punto, Vec3 direccion,
+                             Vec3 *normal, Color *color, Material *material)
+{
+    *normal = (Vec3){0.0, 0.0, 0.0};
+    *color  = (Color){0.0, 0.0, 0.0};
+    material_defecto(material);
+
+    if (objeto == NULL) {
+        return;
+    }
+
+    if (objeto->tipo == TIPO_ESFERA)
+    {
+        const Esfera *esfera = &objeto->u.esfera;
+
+        /* Vector desde el centro hasta el punto de impacto */
+        *normal = vec_normalizar(vec_restar(punto, esfera->centro));
+        *color  = esfera->color;
+        *material = esfera->material;
+    }
+    else if (objeto->tipo == TIPO_POLIGONO)
+    {
+        const Poligono *poligono = &objeto->u.poligono;
+
+        /* Normal calculada al cargar el poligono */
+        *normal = poligono->normal;
+        *color  = poligono->color;
+        *material = poligono->material;
+
+        if (vec_longitud(*normal) <= 1e-12) {
+            Vec3 n = {0.0, 0.0, 0.0};
+            if (calcular_normal_poligono(poligono, &n)) {
+                *normal = n;
+            }
+        }
+    }
+
+    /*
+     * Orientar la normal hacia el lado desde el cual llega el rayo.
+     * Para una esfera vista desde afuera esto no cambia nada; solo
+     * actua cuando el observador queda dentro del objeto.
+     */
+    if (vec_punto(*normal, direccion) > 0.0)
+    {
+        *normal = vec_escalar(*normal, -1.0);
+    }
+}
+
+/* ================================================================== */
+/*  SOMBRAS                                                            */
+/* ================================================================== */
+
+/*
+ * Devuelve 1 si hay un objeto entre el punto y la fuente de luz.
+ *
+ * Se lanza un rayo de sombra desde un punto ligeramente desplazado
+ * hacia afuera a lo largo de la normal, en la direccion de la luz.
+ * Si la interseccion mas cercana esta antes que la luz, el punto
+ * queda en sombra.
+ */
+static int hay_sombra(const Escena *escena, Vec3 punto, Vec3 normal,
+                      Vec3 direccion_luz, double distancia_luz)
+{
+    Vec3 origen = vec_sumar(punto, vec_escalar(normal, EPSILON_SUPERFICIE));
+
+    int    indice = -1;
+    double t = 0.0;
+
+    if (!First_Intersection(escena, origen, direccion_luz, &indice, &t)) {
+        return 0;   /* nada obstruye el camino hacia la luz */
+    }
+
+    /*
+     * El obstaculo debe estar entre el punto y la luz, con un margen
+     * para no sombrear por errores de punto flotante.
+     */
+    return t < distancia_luz - EPSILON_SUPERFICIE;
+}
+
+/* ================================================================== */
+/*  DE_QUE_COLOR: modelo de iluminacion completo                       */
+/* ================================================================== */
+
+Color De_Que_Color(const Escena *escena, Vec3 origen, Vec3 direccion)
+{
+    Color negro = {0.0, 0.0, 0.0};
+
+    if (escena == NULL) {
+        return negro;
+    }
+
+    int    indice = -1;
+    double mejor_t = 0.0;
+
+    /* 1) Superficie mas cercana golpeada por el rayo */
+    if (!First_Intersection(escena, origen, direccion, &indice, &mejor_t)) {
+        return escena->fondo;
+    }
+
+    const Objeto *objeto = &escena->objetos[indice];
+
+    /* 2) Geometria y material del impacto */
+    Vec3    punto   = punto_en_rayo(origen, direccion, mejor_t);
+    Vec3    normal  = {0.0, 0.0, 0.0};
+    Color   base    = {0.0, 0.0, 0.0};
+    Material material;
+    material_defecto(&material);
+
+    datos_de_impacto(objeto, punto, direccion, &normal, &base, &material);
+
+    if (vec_longitud(normal) <= 0.0) {
+        return negro;
+    }
+
+    /* Vector unitario hacia el observador (el ojo de la escena) */
+    Vec3 V = vec_normalizar(vec_restar(escena->ojo, punto));
+
+    /*
+     * 3) Componente ambiental: ka * Ia.
+     * No depende de la normal ni de la luz, por lo que no recibe sombra.
+     */
+    Color color = {
+        base.r * material.ka * escena->ambiente,
+        base.g * material.ka * escena->ambiente,
+        base.b * material.ka * escena->ambiente
+    };
+
+    if (escena->luces == NULL || escena->num_luces <= 0) {
+        return color;
+    }
+
+    /* 4) Recorrer todas las fuentes de luz de la escena */
+    for (int k = 0; k < escena->num_luces; ++k)
+    {
+        Vec3 posicion = escena->luces[k].posicion;
+        double Ip     = escena->luces[k].intensidad;
+
+        /* Vector desde la interseccion hacia la luz */
+        Vec3 vector_luz = vec_restar(posicion, punto);
+
+        /* Distancia hacia la fuente */
+        double distancia_luz = vec_longitud(vector_luz);
+
+        if (distancia_luz <= 0.0) {
+            continue;
+        }
+
+        /* Vector unitario hacia la luz */
+        Vec3 L = vec_normalizar(vector_luz);
+
+        /* Ley de Lambert: coseno entre la normal y la luz */
+        double NdotL = vec_punto(normal, L);
+
+        if (NdotL <= 0.0) {
+            /* La superficie mira hacia el lado opuesto de la luz */
+            continue;
+        }
+
+        /*
+         * 5) Sombra: si algo obstruye el camino hasta la luz,
+         *    esta fuente no aporta difusa ni especular.
+         */
+        if (hay_sombra(escena, punto, normal, L, distancia_luz)) {
+            continue;
+        }
+
+        /* Atenuacion por distancia: Fatt = 1 / (C1 + C2*d + C3*d^2) */
+        double C1 = 1.0;
+        double C2 = 0.02;
+        double C3 = 0.004;
+
+        double denominador = C1 + C2 * distancia_luz + C3 * distancia_luz * distancia_luz;
+        double Fatt = fmin(1.0, 1.0 / denominador);
+
+        /* --- Componente difusa: kd * Ip * Fatt * (N . L) --- */
+        double difusa = material.kd * Ip * Fatt * NdotL;
+
+        color.r += base.r * difusa;
+        color.g += base.g * difusa;
+        color.b += base.b * difusa;
+
+        /*
+         * --- Componente especular: ks * Ip * Fatt * (R . V)^kn ---
+         *
+         * R es la reflexion de L respecto de N:
+         *     R = 2 * (N . L) * N - L
+         * y V el vector hacia el observador. El exponente kn
+         * controla que tan concentrado queda el brillo.
+         */
+        Vec3 R = vec_restar(vec_escalar(normal, 2.0 * NdotL), L);
+
+        double RdotV = vec_punto(R, V);
+
+        if (RdotV > 0.0)
+        {
+            double especular = material.ks * Ip * Fatt * pow(RdotV, material.kn);
+
+            color.r += especular;
+            color.g += especular;
+            color.b += especular;
+        }
+    }
+
+    /* 5) Limitar cada canal al rango [0, 1] */
+    color.r = fmin(1.0, fmax(0.0, color.r));
+    color.g = fmin(1.0, fmax(0.0, color.g));
+    color.b = fmin(1.0, fmax(0.0, color.b));
+
+    return color;
+}
+
+/* ================================================================== */
+/*  TRAZAR_PIXEL                                                       */
+/* ================================================================== */
+
 Color trazar_pixel(const Escena *escena, int columna, int fila)
 {
     Color negro = {0.0, 0.0, 0.0};
@@ -68,200 +364,5 @@ Color trazar_pixel(const Escena *escena, int columna, int fila)
     Vec3 punto_ventana = {x, y, 0.0};
     Vec3 direccion = vec_restar(punto_ventana, escena->ojo);
 
-    /* Buscar la interseccion mas cercana */
-double mejor_t = DBL_MAX;
-Color color = escena->fondo;
-
-/* Ahora guardamos cualquier tipo de objeto */
-const Objeto *objeto_golpeado = NULL;
-
-for (int i = 0; i < escena->num_objetos; ++i)
-{
-    const Objeto *objeto = &escena->objetos[i];
-
-    double t = 0.0;
-    int hay_interseccion = 0;
-
-    /* Interseccion con esfera */
-    if (objeto->tipo == TIPO_ESFERA)
-    {
-        hay_interseccion = intersecar_esfera(
-            escena->ojo,
-            direccion,
-            &objeto->u.esfera,
-            &t
-        );
-    }
-
-    /* Interseccion con poligono */
-    else if (objeto->tipo == TIPO_POLIGONO)
-    {
-        hay_interseccion = intersecar_poligono(
-            escena->ojo,
-            direccion,
-            &objeto->u.poligono,
-            &t
-        );
-    }
-
-    /* Conservar la superficie mas cercana */
-    if (hay_interseccion && t < mejor_t)
-    {
-        mejor_t = t;
-        objeto_golpeado = objeto;
-    }
-}
-
-    /* Calcular la normal en el punto de interseccion */
-if (objeto_golpeado != NULL)
-{
-    /* Punto donde el rayo intersecta la superficie mas cercana */
-    Vec3 punto_interseccion = punto_en_rayo(
-        escena->ojo,
-        direccion,
-        mejor_t
-    );
-
-    Vec3 normal = {0.0, 0.0, 0.0};
-    Color color_base = {0.0, 0.0, 0.0};
-
-    /*
-     * Identificar el tipo de objeto para obtener
-     * su normal y su color.
-     */
-
-    /* CASO 1: ESFERA */
-    if (objeto_golpeado->tipo == TIPO_ESFERA)
-    {
-        const Esfera *esfera = &objeto_golpeado->u.esfera;
-
-        /* Vector desde el centro hasta el punto de impacto */
-        Vec3 vector_normal = vec_restar(
-            punto_interseccion,
-            esfera->centro
-        );
-
-        /* Normal unitaria de la esfera */
-        normal = vec_normalizar(vector_normal);
-
-        /* Color original de la esfera */
-        color_base = esfera->color;
-    }
-
-    /* CASO 2: POLIGONO */
-    else if (objeto_golpeado->tipo == TIPO_POLIGONO)
-    {
-        const Poligono *poligono = &objeto_golpeado->u.poligono;
-
-        /* Normal calculada al cargar el poligono */
-        normal = poligono->normal;
-
-        /* Color original del poligono */
-        color_base = poligono->color;
-
-        /*
-         * Orientar la normal hacia el lado desde
-         * el cual llega el rayo de la camara.
-         */
-        if (vec_punto(normal, direccion) > 0.0)
-        {
-            normal = vec_escalar(normal, -1.0);
-        }
-    }
-
-    /*
-     * ILUMINACION
-     *
-     * Se conserva el modelo original:
-     * ambiental + difusa de Lambert +
-     * multiples luces + atenuacion.
-     */
-
-    /* Posiciones de las fuentes de luz */
-    Vec3 luces[] = {
-        {-3.0, 4.0, -2.0},  /* Luz principal */
-        { 4.0, 2.0, -1.0}   /* Luz secundaria */
-    };
-
-    /* Intensidad de cada fuente */
-    double intensidades[] = {
-        1.0,  /* Luz principal */
-        0.5   /* Luz secundaria */
-    };
-
-    /* Cantidad de fuentes de luz */
-    int num_luces = sizeof(luces) / sizeof(luces[0]);
-
-    /* Coeficiente de reflexion difusa */
-    double Kd = 0.8;
-
-    /* Iluminacion ambiental */
-    double Ka = 0.3;
-    double Ia = 0.5;
-
-    /* Coeficientes de atenuacion */
-    double C1 = 1.0;
-    double C2 = 0.05;
-    double C3 = 0.01;
-
-    /* Inicializar con la contribucion ambiental */
-    double intensidad_total = Ka * Ia;
-
-    /* Recorrer todas las fuentes de luz */
-    for (int k = 0; k < num_luces; k++)
-    {
-        /* Vector desde la interseccion hacia la luz */
-        Vec3 vector_luz = vec_restar(
-            luces[k],
-            punto_interseccion
-        );
-
-        /* Distancia hacia la fuente */
-        double distancia_luz = vec_longitud(vector_luz);
-
-        /* Evitar division entre cero */
-        if (distancia_luz <= 0.0)
-        {
-            continue;
-        }
-
-        /* Vector unitario hacia la luz */
-        Vec3 L = vec_normalizar(vector_luz);
-
-        /* Ley de Lambert */
-        double producto_NL = vec_punto(normal, L);
-
-        if (producto_NL < 0.0)
-        {
-            producto_NL = 0.0;
-        }
-
-        /* Atenuacion por distancia */
-        double denominador = C1
-                           + C2 * distancia_luz
-                           + C3 * distancia_luz * distancia_luz;
-
-        double Fatt = fmin(1.0, 1.0 / denominador);
-
-        /* Contribucion difusa de la fuente actual */
-        double intensidad_difusa =
-            producto_NL * Kd * intensidades[k] * Fatt;
-
-        /* Sumar la contribucion */
-        intensidad_total += intensidad_difusa;
-    }
-
-    /* Limitar la intensidad al rango [0, 1] */
-    intensidad_total = fmin(1.0, intensidad_total);
-
-    /*
-     * Aplicar la iluminacion al color original
-     * del objeto, sea esfera o poligono.
-     */
-    color.r = color_base.r * intensidad_total;
-    color.g = color_base.g * intensidad_total;
-    color.b = color_base.b * intensidad_total;
-}
-
-return color;
+    return De_Que_Color(escena, escena->ojo, direccion);
 }

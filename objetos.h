@@ -32,6 +32,37 @@ typedef struct {
 } Luz;
 
 /* ------------------------------------------------------------------ */
+/* Materiales                                                          */
+/* ------------------------------------------------------------------ */
+
+/*
+ * Propiedades opticas de la superficie. Cada objeto tiene su propio
+ * material, de modo que reacciona de forma distinta ante las fuentes
+ * de luz:
+ *
+ *   ka  coeficiente de reflexion ambiental  -> componente ambiente
+ *   kd  coeficiente de reflexion difusa     -> ley de Lambert
+ *   ks  coeficiente de reflexion especular  -> brillo de Phong
+ *   kn  exponente de brillo                 -> tamano del brillo
+ *
+ * Modelo aplicado por raytracing.c:
+ *
+ *   I = ka*Ia + SUM_luz( kd*Ip*Fatt*(N.L) ) + SUM_luz( ks*Ip*Fatt*(R.V)^kn )
+ */
+typedef struct {
+    double ka;
+    double kd;
+    double ks;
+    double kn;
+} Material;
+
+/* Valores por defecto usados cuando el archivo no especifica material. */
+#define MATERIAL_KA_DEFECTO  0.3
+#define MATERIAL_KD_DEFECTO  0.8
+#define MATERIAL_KS_DEFECTO  0.6
+#define MATERIAL_KN_DEFECTO  48.0
+
+/* ------------------------------------------------------------------ */
 /* Tipos de objeto                                                     */
 /* ------------------------------------------------------------------ */
 
@@ -41,9 +72,10 @@ typedef enum {
 } TipoObjeto;
 
 typedef struct {
-    Vec3   centro;
-    double radio;
-    Color  color;
+    Vec3    centro;
+    double  radio;
+    Color   color;
+    Material material;
 } Esfera;
 
 typedef struct {
@@ -51,6 +83,7 @@ typedef struct {
     int num_vertices;
     Vec3 normal;
     Color color;
+    Material material;
 } Poligono;
 
 /*
@@ -85,6 +118,13 @@ typedef struct {
     int alto;
 
     Color fondo; /* color cuando el rayo no golpea ningun objeto */
+
+    /*
+     * Intensidad de la iluminacion ambiental de la escena (Ia).
+     * Se lee con la palabra clave "ambiente"; su valor por defecto
+     * conserva el resultado del modelo original (Ka * Ia = 0.15).
+     */
+    double ambiente;
 
     Objeto *objetos;      /* arreglo dinamico de objetos            */
     int     num_objetos;

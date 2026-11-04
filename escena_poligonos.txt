@@ -1,11 +1,15 @@
 # ============================================================
-# escena.txt - descripcion de la escena (formato del grupo)
+# escena_poligonos.txt - esferas y poligonos (formato del grupo)
 #
 #   resolucion <ancho> <alto>
 #   ojo        <x> <y> <z>
 #   ventana    <xmin> <ymin> <xmax> <ymax>
 #   fondo      <r> <g> <b>
+#   ambiente   <a>
+#   luz        <x> <y> <z> <intensidad>
 #   esfera     <cx> <cy> <cz> <radio> <r> <g> <b>   (minimo 8)
+#   poligono   <n>  x1 y1 z1 ... xn yn zn  <r> <g> <b>   (n <= 16)
+#   material   <ka> <kd> <ks> <kn>    (opcional, objeto anterior)
 #   fin
 #
 # Colores en [0, 1]. Los valores usan notacion decimal C.
@@ -64,10 +68,16 @@ esfera  2.55   1.50  2.5  0.78   0.97 0.39 0.32
 # Esfera pequena debajo a la derecha
 esfera  2.95  -2.05  3.0  0.42   0.98 0.96 0.89
 
-# Cuadrilatero rojo
-poligono 4  -2 -2 4   2 -2 4   2 2 4   -2 2 4   1 0 0
+# ------------------------------------------------------------
+# Poligonos.  Las 12 esferas ocupan x in [-2.35, 3.37], asi que
+# los poligonos se dejan en las franjas laterales libres para que
+# no queden tapados por completo.
+# ------------------------------------------------------------
 
-# Poligono concavo verde en forma de L
-poligono 6  -3 -2 5   1 -2 5   1 -1 5   -2 -1 5   -2 2 5   -3 2 5   0 1 0
+# Cuadrilatero rojo vertical, franja izquierda (detras de las esferas)
+poligono 4  -5.6 -3.0 4   -3.9 -3.0 4   -3.9 3.0 4   -5.6 3.0 4   1 0 0
+
+# Poligono concavo verde en forma de L, franja derecha
+poligono 6  4.6 -3.4 5   6.2 -3.4 5   6.2 -2.3 5   5.5 -2.3 5   5.5 2.8 5   4.6 2.8 5   0 1 0
 
 fin
