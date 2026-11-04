@@ -6,6 +6,7 @@
  * los decide imprimir (o no) quien llame a escena_leer().
  */
 #include "escena.h"
+#include "poligonos.h"
 
 #include <ctype.h>
 #include <errno.h>
@@ -47,8 +48,10 @@ void escena_inicializar(Escena *escena)
 
     escena->cap_objetos = ESCENA_CAP_INICIAL;
     escena->objetos = (Objeto *)calloc((size_t)escena->cap_objetos,
-                                       sizeof(Objeto));
-    
+    sizeof(Objeto));
+    escena->cap_luces = 4;
+    escena->num_luces = 0;
+    escena->luces = (Luz *)calloc((size_t)escena->cap_luces, sizeof(Luz));
 }
 
 const char *escena_error(const Escena *escena)
@@ -189,6 +192,159 @@ int escena_agregar_esfera(Escena *escena, Vec3 centro, double radio,
     return 1;
 }
 
+/*
+ * Agrega un poligono a la escena. Devuelve 1 si tuvo exito, 0 si no.
+ */
+
+int escena_agregar_poligono(
+    Escena *escena,
+    const Vec3 *vertices,
+    int num_vertices,
+    Color color
+)
+{
+    if (escena == NULL || 
+        vertices == NULL || 
+        num_vertices < 3 || 
+        num_vertices > ESCENA_MAX_VERTICES) {
+        return 0;
+    }
+
+    /*Crear estructura temporal para validar geometria*/
+    Poligono temporal = {
+        .vertices = (Vec3 *)vertices,
+        .num_vertices = num_vertices,
+        .normal = {0.0, 0.0, 0.0},
+        .color = color
+    };
+
+    /* Validar aristas */
+    if (!validar_aristas(&temporal)) {
+        return 0;
+    }
+
+    /* Validar coplanaridad*/
+    if (!validar_coplanaridad(&temporal)) {
+        return 0;
+    }
+
+    /* Comprobar que el contorno no se cruce */
+    if (!validar_poligono_simple(&temporal)) {
+    return 0;
+}
+
+    /* Calcular la normal del poligono */
+    Vec3 normal;
+    if (!calcular_normal_poligono(
+        &temporal, 
+        &normal)) {
+        return 0;
+    }
+
+    /* Reservar memorioa para almacenar una copia de los vertices */
+    Vec3 *copia = malloc(
+        (size_t)num_vertices * sizeof(Vec3)
+    );
+
+    if (copia == NULL) {
+        return 0;
+    }
+
+    for (int i = 0; i < num_vertices; i++) {
+        copia[i] = vertices[i];
+    }
+
+    /* Aumentar la capacidad del arreglo de objetos si es necesario */
+    if (escena->num_objetos >= escena->cap_objetos) {
+        int nueva_cap = (escena->cap_objetos > 0) 
+        ? escena->cap_objetos * 2
+        : ESCENA_CAP_INICIAL;
+
+        Objeto *nuevo = (Objeto *)realloc(
+            escena->objetos,
+            (size_t)nueva_cap * sizeof(Objeto)
+        );
+
+        if (nuevo == NULL) {
+            free(copia);
+            return 0;
+        }
+
+        escena->objetos     = nuevo;
+        escena->cap_objetos = nueva_cap;
+    }
+
+    /*Agregar el nuevo objeto*/
+    Objeto *nuevo = &escena->objetos[escena->num_objetos];
+    nuevo->tipo = TIPO_POLIGONO;
+    nuevo->u.poligono.vertices = copia;
+    nuevo->u.poligono.num_vertices = num_vertices;
+    nuevo->u.poligono.normal = normal;
+    nuevo->u.poligono.color = color;
+
+    escena->num_objetos++;
+
+    return 1;
+}
+
+/* =========================================================
+   AGREGAR FUENTE DE LUZ
+   ========================================================= */
+
+int escena_agregar_luz(
+    Escena *escena,
+    Vec3 posicion,
+    double intensidad
+)
+{
+    Luz *nuevo;
+    Luz *crecido;
+    int nueva_cap;
+
+    /* Validar los parametros */
+    if (escena == NULL ||
+        !isfinite(intensidad) ||
+        intensidad < 0.0 ||
+        intensidad > 1.0 ||
+        !isfinite(posicion.x) ||
+        !isfinite(posicion.y) ||
+        !isfinite(posicion.z))
+    {
+        return 0;
+    }
+
+    /* Verificar si se necesita mas espacio */
+    if (escena->num_luces >= escena->cap_luces)
+    {
+        nueva_cap = (escena->cap_luces > 0)
+            ? escena->cap_luces * 2
+            : 4;
+
+        crecido = (Luz *)realloc(
+            escena->luces,
+            (size_t)nueva_cap * sizeof(Luz)
+        );
+
+        if (crecido == NULL)
+        {
+            return 0;
+        }
+
+        escena->luces = crecido;
+        escena->cap_luces = nueva_cap;
+    }
+
+    /* Guardar la nueva fuente de luz */
+    nuevo = &escena->luces[escena->num_luces];
+
+    nuevo->posicion = posicion;
+    nuevo->intensidad = intensidad;
+
+    /* Actualizar la cantidad de luces */
+    escena->num_luces++;
+
+    return 1;
+}
 
 int escena_num_esferas(const Escena *escena)
 {
@@ -339,6 +495,204 @@ static int leer_esfera(Escena *e, char *tokens[], int n, int linea,
     return 1;
 }
 
+/* =========================================================
+   LECTURA DE POLIGONOS
+   ========================================================= 
+   Formato: poligono <num_vertices> <x1> <y1> <z1> ... <xn> <yn> <zn> <r> <g> <b>
+   - num_vertices: numero de vertices del poligono (>= 3)
+   - <xi> <yi> <zi>: coordenadas de cada vertice
+   - <r> <g> <b>: color del poligono en el rango [0, 1]
+   - Todos los valores son decimales (formato C, admite notacion 1e-3).
+   */
+   static int leer_poligono(
+    Escena *e,
+    char *tokens[],
+    int n,
+    int linea,
+    const char *nombre
+)
+{
+    int cantidad;
+
+    /*Leer cantidad de verticaes*/
+    if (n < 2 || !a_entero(tokens[1], &cantidad)) {
+        fijar_error(
+            e,
+            linea,
+            nombre,
+            "\"poligono\" necesita un numero de vertices valido"
+        );
+        return 0;
+    }
+    
+    if (cantidad < 3 || 
+    cantidad > ESCENA_MAX_VERTICES) {
+        fijar_error(
+            e,
+            linea,
+            nombre,
+            "\"poligono\" necesita al menos 3 vertices y como maximo 16"
+        );
+        return 0;
+    }
+
+    /*Formato:
+    1 token: poligono
+    1 token: cantidad de vertices
+    3*N tokens: coordenadas de cada vertice
+    3 tokens: color del poligono
+    */
+    int esperados = 2 + 3 * cantidad + 3;
+
+    if (n != esperados) {
+        fijar_error(
+            e,
+            linea,
+            nombre,
+            "cantidad incorrecta de coordenadas para el poligono"
+        );
+        return 0;
+    }
+
+    Vec3 vertices[ESCENA_MAX_VERTICES];
+
+    /* Leer las coordenadas de los vertices */
+    for (int i = 0; i < cantidad; i++) {
+
+        int indice = 2 + 3 * i;
+
+        if (!a_doble(tokens[indice], &vertices[i].x) ||
+            !a_doble(tokens[indice + 1], &vertices[i].y) ||
+            !a_doble(tokens[indice + 2], &vertices[i].z)) {
+            fijar_error(
+                e,
+                linea,
+                nombre,
+                "coordenadas de vertice invalidas"
+            );
+            return 0;
+        }
+    }
+
+    /* Leer el color del poligono */
+    int indice_color = 2 + 3 * cantidad;
+    Color color;
+
+    if (!a_doble(tokens[indice_color], &color.r) ||
+        !a_doble(tokens[indice_color + 1], &color.g) ||
+        !a_doble(tokens[indice_color + 2], &color.b)) {
+        fijar_error(
+            e,
+            linea,
+            nombre,
+            "color del poligono invalido"
+        );
+        return 0;
+    }
+
+    if (color.r < 0.0 || color.r > 1.0 ||
+        color.g < 0.0 || color.g > 1.0 ||
+        color.b < 0.0 || color.b > 1.0) {
+        fijar_error(
+            e,
+            linea,
+            nombre,
+            "color del poligono debe estar en el rango [0, 1]"
+        );
+        return 0;
+    }
+
+    /* Validar y agregar el poligono a la escena */
+    if (!escena_agregar_poligono(
+        e,
+        vertices,
+        cantidad,
+        color)) {
+        
+        fijar_error(
+            e,
+            linea,
+            nombre,
+            "no se pudo agregar el poligono a la escena"
+        );
+        return 0;
+        }
+
+    return 1;
+}
+
+/* =========================================================
+   LECTURA DE FUENTES DE LUZ
+   ========================================================= */
+
+static int leer_luz(
+    Escena *e,
+    char *tokens[],
+    int n,
+    int linea,
+    const char *nombre
+)
+{
+    double valores[4];
+    Vec3 posicion;
+
+    /* luz x y z intensidad = 5 tokens */
+    if (!arity_ok(e, n, 5, linea, nombre, "luz"))
+    {
+        return 0;
+    }
+
+    /* Convertir los cuatro valores numericos */
+    for (int i = 0; i < 4; i++)
+    {
+        if (!a_doble(tokens[i + 1], &valores[i]))
+        {
+            fijar_error(
+                e,
+                linea,
+                nombre,
+                "\"luz\" necesita cuatro valores numericos"
+            );
+            return 0;
+        }
+    }
+
+    /* Validar intensidad */
+    if (valores[3] < 0.0 || valores[3] > 1.0)
+    {
+        fijar_error(
+            e,
+            linea,
+            nombre,
+            "la intensidad de la luz debe estar en [0, 1]"
+        );
+        return 0;
+    }
+
+    /* Establecer la posicion */
+    posicion.x = valores[0];
+    posicion.y = valores[1];
+    posicion.z = valores[2];
+
+    /* Agregar la luz a la escena */
+    if (!escena_agregar_luz(e, posicion, valores[3]))
+    {
+        fijar_error(
+            e,
+            linea,
+            nombre,
+            "no se pudo agregar la fuente de luz"
+        );
+        return 0;
+    }
+
+    return 1;
+}
+
+
+/* =========================================================
+   LECTURA DE LA ESCENA
+   ========================================================= */
 
 int escena_leer_flujo(Escena *escena, FILE *flujo, const char *nombre)
 {
@@ -409,6 +763,24 @@ int escena_leer_flujo(Escena *escena, FILE *flujo, const char *nombre)
                 return 0;
             }
             num_esferas++;
+            continue;
+        }
+
+        /* Leer un poligono */
+        if (strcmp(tokens[0], "poligono") == 0)
+        {
+            if (!leer_poligono(escena, tokens, n, num_linea, nombre)) {
+                return 0;
+            }
+            continue;
+        }
+
+        /* Leer una fuente de luz */
+        if (strcmp(tokens[0], "luz") == 0)
+        {
+            if (!leer_luz(escena, tokens, n, num_linea, nombre)){
+                return 0;
+            }
             continue;
         }
 
@@ -493,11 +865,30 @@ void escena_liberar(Escena *escena)
         return;
     }
 
-    /* Liberar objetos */
+    /*
+     * Liberar la memoria de los vertices
+     * de cada poligono.
+     */
+    for (int i = 0; i < escena->num_objetos; i++)
+    {
+        Objeto *objeto = &escena->objetos[i];
+
+        if (objeto->tipo == TIPO_POLIGONO)
+        {
+            free(objeto->u.poligono.vertices);
+
+            objeto->u.poligono.vertices = NULL;
+            objeto->u.poligono.num_vertices = 0;
+        }
+    }
+
+    /* Liberar arreglo de objetos */
     free(escena->objetos);
 
     escena->objetos = NULL;
     escena->num_objetos = 0;
     escena->cap_objetos = 0;
+
+    free(escena->luces);
 
 }

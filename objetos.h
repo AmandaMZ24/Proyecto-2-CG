@@ -26,17 +26,18 @@ typedef struct {
     double b;
 } Color;
 
+typedef struct {
+    Vec3 posicion;
+    double intensidad;
+} Luz;
 
 /* ------------------------------------------------------------------ */
 /* Tipos de objeto                                                     */
 /* ------------------------------------------------------------------ */
 
 typedef enum {
-    TIPO_ESFERA = 0
-    /* Futuros tipos:
-     * , TIPO_PLANO
-     * , TIPO_CAJA
-     */
+    TIPO_ESFERA = 0,
+    TIPO_POLIGONO = 1
 } TipoObjeto;
 
 typedef struct {
@@ -44,6 +45,13 @@ typedef struct {
     double radio;
     Color  color;
 } Esfera;
+
+typedef struct {
+    Vec3 *vertices;
+    int num_vertices;
+    Vec3 normal;
+    Color color;
+} Poligono;
 
 /*
  * Objeto "etiquetado": el campo `tipo` indica que miembro de la union es
@@ -53,10 +61,7 @@ typedef struct {
     TipoObjeto tipo;
     union {
         Esfera esfera;
-        /* Futuros objetos:
-         * Plano plano;
-         * Caja  caja;
-         */
+        Poligono poligono;
     } u;
 } Objeto;
 
@@ -84,6 +89,11 @@ typedef struct {
     Objeto *objetos;      /* arreglo dinamico de objetos            */
     int     num_objetos;
     int     cap_objetos;
+
+    /* Fuentes de luz de la escena */
+    Luz *luces;
+    int num_luces;
+    int cap_luces;
 
     char error[256];      /* descripcion del ultimo error de lectura */
 } Escena;

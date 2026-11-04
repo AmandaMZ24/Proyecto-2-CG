@@ -1,7 +1,7 @@
 CC = gcc
 CFLAGS = -std=c11 -O2 -Wall -Wextra -Wpedantic
 LDLIBS = -lm
-OBJS = main.o escena.o vectores.o raytracing.o framebuffer.o
+OBJS = main.o escena.o vectores.o poligonos.o raytracing.o framebuffer.o
 BIN = raytracing
 all: $(BIN)
 $(BIN): $(OBJS)
@@ -11,10 +11,13 @@ escena.o: escena.c escena.h objetos.h
 vectores.o: vectores.c vectores.h objetos.h
 raytracing.o: raytracing.c raytracing.h vectores.h objetos.h
 framebuffer.o: framebuffer.c framebuffer.h raytracing.h objetos.h
+poligonos.o: poligonos.c poligonos.h vectores.h objetos.h
 clean:
 	rm -f $(OBJS) $(BIN)
+ESCENA ?= escena_prueba_visual.txt
+
 run: $(BIN)
-	./$(BIN) escena.txt imagen.avs
+	./$(BIN) $(ESCENA) imagen.avs
 
 jpg:
 	magick imagen.avs -quality 100 imagen.jpg

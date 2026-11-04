@@ -1,8 +1,10 @@
 #include <float.h>
 #include <math.h>
 #include <stddef.h>
+
 #include "raytracing.h"
 #include "vectores.h"
+#include "poligonos.h"
 
 /* Calcula un punto sobre el rayo: P(t) = origen + t * direccion */
 static Vec3 punto_en_rayo(Vec3 origen, Vec3 direccion, double t)
@@ -66,47 +68,114 @@ Color trazar_pixel(const Escena *escena, int columna, int fila)
     Vec3 punto_ventana = {x, y, 0.0};
     Vec3 direccion = vec_restar(punto_ventana, escena->ojo);
 
-    double mejor_t = DBL_MAX;
-    Color color = escena->fondo;
-    const Esfera *esfera_golpeada = NULL;
+    /* Buscar la interseccion mas cercana */
+double mejor_t = DBL_MAX;
+Color color = escena->fondo;
 
-    for (int i = 0; i < escena->num_objetos; ++i) {
-        const Objeto *objeto = &escena->objetos[i];
+/* Ahora guardamos cualquier tipo de objeto */
+const Objeto *objeto_golpeado = NULL;
 
-        if (objeto->tipo != TIPO_ESFERA) {
-            continue;
-        }
+for (int i = 0; i < escena->num_objetos; ++i)
+{
+    const Objeto *objeto = &escena->objetos[i];
 
-        double t;
+    double t = 0.0;
+    int hay_interseccion = 0;
 
-        if (intersecar_esfera(escena->ojo, direccion, &objeto->u.esfera, &t) &&
-            t < mejor_t) {
-            mejor_t = t;
-            esfera_golpeada = &objeto->u.esfera;
-            color = objeto->u.esfera.color;
-        }
+    /* Interseccion con esfera */
+    if (objeto->tipo == TIPO_ESFERA)
+    {
+        hay_interseccion = intersecar_esfera(
+            escena->ojo,
+            direccion,
+            &objeto->u.esfera,
+            &t
+        );
     }
 
+    /* Interseccion con poligono */
+    else if (objeto->tipo == TIPO_POLIGONO)
+    {
+        hay_interseccion = intersecar_poligono(
+            escena->ojo,
+            direccion,
+            &objeto->u.poligono,
+            &t
+        );
+    }
+
+    /* Conservar la superficie mas cercana */
+    if (hay_interseccion && t < mejor_t)
+    {
+        mejor_t = t;
+        objeto_golpeado = objeto;
+    }
+}
+
     /* Calcular la normal en el punto de interseccion */
-if (esfera_golpeada != NULL)
+if (objeto_golpeado != NULL)
 {
-    /* Punto donde el rayo golpea la esfera */
+    /* Punto donde el rayo intersecta la superficie mas cercana */
     Vec3 punto_interseccion = punto_en_rayo(
         escena->ojo,
         direccion,
         mejor_t
     );
 
-    /* Vector desde el centro hasta el punto de impacto */
-    Vec3 vector_normal = vec_restar(
-        punto_interseccion,
-        esfera_golpeada->centro
-    );
+    Vec3 normal = {0.0, 0.0, 0.0};
+    Color color_base = {0.0, 0.0, 0.0};
 
-   /* Convertir la normal en un vector unitario */
-    Vec3 normal = vec_normalizar(vector_normal);
+    /*
+     * Identificar el tipo de objeto para obtener
+     * su normal y su color.
+     */
 
+    /* CASO 1: ESFERA */
+    if (objeto_golpeado->tipo == TIPO_ESFERA)
+    {
+        const Esfera *esfera = &objeto_golpeado->u.esfera;
 
+        /* Vector desde el centro hasta el punto de impacto */
+        Vec3 vector_normal = vec_restar(
+            punto_interseccion,
+            esfera->centro
+        );
+
+        /* Normal unitaria de la esfera */
+        normal = vec_normalizar(vector_normal);
+
+        /* Color original de la esfera */
+        color_base = esfera->color;
+    }
+
+    /* CASO 2: POLIGONO */
+    else if (objeto_golpeado->tipo == TIPO_POLIGONO)
+    {
+        const Poligono *poligono = &objeto_golpeado->u.poligono;
+
+        /* Normal calculada al cargar el poligono */
+        normal = poligono->normal;
+
+        /* Color original del poligono */
+        color_base = poligono->color;
+
+        /*
+         * Orientar la normal hacia el lado desde
+         * el cual llega el rayo de la camara.
+         */
+        if (vec_punto(normal, direccion) > 0.0)
+        {
+            normal = vec_escalar(normal, -1.0);
+        }
+    }
+
+    /*
+     * ILUMINACION
+     *
+     * Se conserva el modelo original:
+     * ambiental + difusa de Lambert +
+     * multiples luces + atenuacion.
+     */
 
     /* Posiciones de las fuentes de luz */
     Vec3 luces[] = {
@@ -116,8 +185,8 @@ if (esfera_golpeada != NULL)
 
     /* Intensidad de cada fuente */
     double intensidades[] = {
-        1.0,   /* Luz principal */
-        0.5    /* Luz secundaria */
+        1.0,  /* Luz principal */
+        0.5   /* Luz secundaria */
     };
 
     /* Cantidad de fuentes de luz */
@@ -169,8 +238,8 @@ if (esfera_golpeada != NULL)
 
         /* Atenuacion por distancia */
         double denominador = C1
-                        + C2 * distancia_luz
-                        + C3 * distancia_luz * distancia_luz;
+                           + C2 * distancia_luz
+                           + C3 * distancia_luz * distancia_luz;
 
         double Fatt = fmin(1.0, 1.0 / denominador);
 
@@ -185,11 +254,14 @@ if (esfera_golpeada != NULL)
     /* Limitar la intensidad al rango [0, 1] */
     intensidad_total = fmin(1.0, intensidad_total);
 
-    /* Aplicar la iluminacion al color original */
-    color.r = esfera_golpeada->color.r * intensidad_total;
-    color.g = esfera_golpeada->color.g * intensidad_total;
-    color.b = esfera_golpeada->color.b * intensidad_total;
+    /*
+     * Aplicar la iluminacion al color original
+     * del objeto, sea esfera o poligono.
+     */
+    color.r = color_base.r * intensidad_total;
+    color.g = color_base.g * intensidad_total;
+    color.b = color_base.b * intensidad_total;
 }
 
-    return color;
+return color;
 }

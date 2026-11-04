@@ -1,0 +1,15 @@
+# Archivos compilados
+*.o
+raytracing
+
+# Ejecutables de pruebas
+pruebas/prueba_*
+
+# Archivos generados
+*.avs
+
+# Archivos temporales
+*.swp
+*~
+# Conservar codigo fuente de pruebas
+!pruebas/*.c
