@@ -50,14 +50,6 @@ void escena_inicializar(Escena *escena)
     escena->objetos = (Objeto *)calloc((size_t)escena->cap_objetos,
                                        sizeof(Objeto));
     
-    /* Inicializar el arreglo dinamico de luces */
-    escena->cap_luces = 4;
-    escena->num_luces = 0;
-
-    escena->luces = (Luz *)calloc(
-        (size_t)escena->cap_luces,
-        sizeof(Luz)
-    );
 }
 
 const char *escena_error(const Escena *escena)
@@ -293,65 +285,6 @@ int escena_agregar_poligono(
     return 1;
 }
 
-/* =========================================================
-   AGREGAR FUENTE DE LUZ
-   ========================================================= */
-
-int escena_agregar_luz(
-    Escena *escena,
-    Vec3 posicion,
-    double intensidad
-)
-{
-    Luz *nuevo;
-    Luz *crecido;
-    int nueva_cap;
-
-    /* Validar los parametros */
-    if (escena == NULL ||
-        !isfinite(intensidad) ||
-        intensidad < 0.0 ||
-        intensidad > 1.0 ||
-        !isfinite(posicion.x) ||
-        !isfinite(posicion.y) ||
-        !isfinite(posicion.z))
-    {
-        return 0;
-    }
-
-    /* Verificar si se necesita mas espacio */
-    if (escena->num_luces >= escena->cap_luces)
-    {
-        nueva_cap = (escena->cap_luces > 0)
-            ? escena->cap_luces * 2
-            : 4;
-
-        /* Ampliar el arreglo */
-        crecido = (Luz *)realloc(
-            escena->luces,
-            (size_t)nueva_cap * sizeof(Luz)
-        );
-
-        if (crecido == NULL)
-        {
-            return 0;
-        }
-
-        escena->luces = crecido;
-        escena->cap_luces = nueva_cap;
-    }
-
-    /* Guardar la nueva fuente de luz */
-    nuevo = &escena->luces[escena->num_luces];
-
-    nuevo->posicion = posicion;
-    nuevo->intensidad = intensidad;
-
-    /* Actualizar la cantidad de luces */
-    escena->num_luces++;
-
-    return 1;
-}
 
 int escena_num_esferas(const Escena *escena)
 {
@@ -725,7 +658,7 @@ int escena_leer_flujo(Escena *escena, FILE *flujo, const char *nombre)
         fijar_error(escena, 0, nombre, "no se pudo abrir el archivo");
         return 0;
     }
-    if (escena->objetos == NULL || escena->luces == NULL) {
+    if (escena->objetos == NULL) {
         fijar_error(escena, 0, nombre, "sin memoria para la escena");
         return 0;
 }
@@ -792,8 +725,8 @@ int escena_leer_flujo(Escena *escena, FILE *flujo, const char *nombre)
         }
 
         if (!leer_cabecera(escena, tokens, n, num_linea, nombre,
-                           &tiene_resolucion, &tiene_ojo, &tiene_ventana,
-                           &tiene_fondo)) {
+                        &tiene_resolucion, &tiene_ojo,
+                        &tiene_ventana, &tiene_fondo)) {
             return 0;
         }
     }
@@ -802,7 +735,7 @@ int escena_leer_flujo(Escena *escena, FILE *flujo, const char *nombre)
         fijar_error(escena, 0, nombre, "error al leer el archivo");
         return 0;
     }
-
+    
     if (!termino && feof(flujo) == 0) {
         fijar_error(escena, 0, nombre, "fin de archivo inesperado");
         return 0;
@@ -896,10 +829,4 @@ void escena_liberar(Escena *escena)
     escena->num_objetos = 0;
     escena->cap_objetos = 0;
 
-    /* Liberar fuentes de luz */
-    free(escena->luces);
-
-    escena->luces = NULL;
-    escena->num_luces = 0;
-    escena->cap_luces = 0;
 }
