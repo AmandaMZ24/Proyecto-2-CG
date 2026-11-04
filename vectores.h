@@ -8,6 +8,7 @@ Vec3 vec_restar(Vec3 a, Vec3 b);
 Vec3 vec_sumar(Vec3 a, Vec3 b);
 Vec3 vec_escalar(Vec3 v, double t);
 double vec_punto(Vec3 a, Vec3 b);
+Vec3 vec_cruz(Vec3 a, Vec3 b);
 
 /* Operaciones para iluminacion */
 double vec_longitud(Vec3 v);

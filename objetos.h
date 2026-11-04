@@ -36,11 +36,8 @@ typedef struct {
 /* ------------------------------------------------------------------ */
 
 typedef enum {
-    TIPO_ESFERA = 0
-    /* Futuros tipos:
-     * , TIPO_PLANO
-     * , TIPO_CAJA
-     */
+    TIPO_ESFERA = 0,
+    TIPO_POLIGONO = 1
 } TipoObjeto;
 
 typedef struct {
@@ -48,6 +45,13 @@ typedef struct {
     double radio;
     Color  color;
 } Esfera;
+
+typedef struct {
+    Vec3 *vertices;
+    int num_vertices;
+    Vec3 normal;
+    Color color;
+} Poligono;
 
 /*
  * Objeto "etiquetado": el campo `tipo` indica que miembro de la union es
@@ -57,10 +61,7 @@ typedef struct {
     TipoObjeto tipo;
     union {
         Esfera esfera;
-        /* Futuros objetos:
-         * Plano plano;
-         * Caja  caja;
-         */
+        Poligono poligono;
     } u;
 } Objeto;
 

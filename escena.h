@@ -35,6 +35,12 @@
 #define ESCENA_CAP_INICIAL 16
 
 /*
+ * Maximo de vertices por poligono.
+ * El lector actual admite hasta 64 tokens por linea.
+ */
+#define ESCENA_MAX_VERTICES 16
+
+/*
  * Inicializa la escena vacia. Siempre debe llamarse (o bien usar
  * escena_leer, que lo hace internamente) antes de cualquier otra funcion.
  */
@@ -59,6 +65,9 @@ const char *escena_error(const Escena *escena);
 
 /* Agrega una esfera a la escena. Devuelve 1 si tuvo exito, 0 si no. */
 int escena_agregar_esfera(Escena *escena, Vec3 centro, double radio, Color color);
+
+/* Agrega un poligono a la escena. Devuelve 1 si tuvo exito, 0 si no. */
+int escena_agregar_poligono(Escena *escena, const Vec3 *vertices, int num_vertices, Color color);
 
 /* Agrega una fuente de luz a la escena */
 int escena_agregar_luz(Escena *escena, Vec3 posicion, double intensidad);
