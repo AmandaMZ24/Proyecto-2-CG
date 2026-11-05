@@ -2,6 +2,14 @@
 #include "raytracing.h"
 #include <stdio.h>
 #include <stdint.h>
+#include <time.h>
+
+/* Tiempo real transcurrido, en segundos (C11). */
+static double tiempo_actual(void){
+    struct timespec t;
+    if (timespec_get(&t, TIME_UTC) != TIME_UTC) return 0.0;
+    return (double)t.tv_sec + (double)t.tv_nsec / 1000000000.0;
+}
 
 /*
  * Convierte un canal de color del rango [0, 1]
@@ -51,6 +59,12 @@ int guardar_avs(const char *ruta, const Escena *escena){
         correcto = 0;
     }
 
+    /* Barra de avance: filas terminadas, tiempo y estimacion restante. */
+    double inicio = tiempo_actual();
+    int ultimo_porcentaje = -1;
+    fprintf(stderr, "Renderizando %ux%u...\n", ancho, alto);
+    fflush(stderr);
+
     /* Generar y escribir cada pixel */
     for (int y = 0; correcto && y < escena->alto; y++){
         for (int x = 0; x < escena->ancho; x++){
@@ -67,7 +81,23 @@ int guardar_avs(const char *ruta, const Escena *escena){
                 break;
             }
         }
+
+        if (correcto){
+            int filas = y + 1;
+            int porcentaje = (int)(100.0 * filas / escena->alto);
+            if (porcentaje != ultimo_porcentaje){
+                double transcurrido = tiempo_actual() - inicio;
+                double restante = filas > 0
+                    ? transcurrido * (escena->alto - filas) / filas : 0.0;
+                fprintf(stderr,
+                        "\rAvance: %3d%% | %d/%d filas | Transcurrido: %.0f s | Restante aprox.: %.0f s   ",
+                        porcentaje, filas, escena->alto, transcurrido, restante);
+                fflush(stderr);
+                ultimo_porcentaje = porcentaje;
+            }
+        }
     }
+    fprintf(stderr, "\n");
 
     /* Comprobar que el archivo se cierre correctamente */
     if (fclose(archivo) != 0){
