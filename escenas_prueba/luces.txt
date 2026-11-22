@@ -1,0 +1,27 @@
+# Prueba de MULTIPLES FUENTES DE LUZ con intensidades distintas.
+# Cada esfera recibe tres luces: tres brillos especulares y sombras
+# que se solapan (donde una luz se bloquea, las otras siguen llenando).
+resolucion 640 360
+ojo 0 0 -5
+ventana -3.2 -1.8 3.2 1.8
+fondo 0.07 0.08 0.12
+ambiente 0.12
+luz -5.0 5.0 -4.0 1.0
+luz  5.0 4.5 -3.0 0.65
+luz  0.0 6.0  3.0 0.45
+
+# Suelo
+poligono 4 -12 -1.6 -4  12 -1.6 -4  12 -1.6 10  -12 -1.6 10 0.52 0.52 0.55 0.30 0.70 0.15 24
+
+# Fila delantera
+esfera -2.4 -0.70 1.5 0.90 0.90 0.40 0.30 0.25 0.75 0.55 64
+esfera -0.8 -0.90 2.5 0.70 0.35 0.65 0.95 0.25 0.75 0.55 64
+esfera  0.8 -0.80 1.8 0.80 0.95 0.85 0.35 0.25 0.75 0.55 64
+esfera  2.4 -0.95 2.8 0.65 0.55 0.90 0.55 0.25 0.75 0.55 64
+
+# Fila trasera
+esfera -1.8 -0.85 5.0 0.75 0.85 0.45 0.85 0.25 0.75 0.55 64
+esfera -0.2 -0.80 6.0 0.80 0.98 0.98 0.98 0.25 0.75 0.55 64
+esfera  1.4 -0.90 5.5 0.70 0.40 0.80 0.75 0.25 0.75 0.55 64
+esfera  2.8 -0.75 6.5 0.85 0.95 0.60 0.35 0.25 0.75 0.55 64
+fin

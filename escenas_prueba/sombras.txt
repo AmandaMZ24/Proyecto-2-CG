@@ -1,0 +1,28 @@
+# Prueba de SOMBRAS PROYECTADAS.
+# Una luz lateral e intensa proyecta sombras largas de las esferas
+# sobre el suelo y sobre la pared del fondo.
+resolucion 640 360
+ojo 0 0 -5
+ventana -3.2 -1.8 3.2 1.8
+fondo 0.08 0.09 0.14
+ambiente 0.15
+luz -8.0 5.0 -5.0 1.0
+
+# Suelo
+poligono 4 -12 -1.6 -4  12 -1.6 -4  12 -1.6 10  -12 -1.6 10 0.60 0.60 0.62 0.30 0.70 0 24
+
+# Pared del fondo (plano z = 10)
+poligono 4 -12 -1.6 10  12 -1.6 10  12 8 10  -12 8 10 0.45 0.48 0.55 0.35 0.70 0 16
+
+# Esferas apoyadas en el suelo
+esfera -3.0 -0.70 1.0 0.90 0.90 0.35 0.25 0.30 0.75 0.25 48
+esfera -1.2 -0.95 3.0 0.65 0.35 0.60 0.95 0.30 0.75 0.25 48
+esfera  0.4 -0.80 2.0 0.80 0.85 0.85 0.88 0.30 0.75 0.25 48
+esfera  2.0 -1.00 4.5 0.60 0.45 0.80 0.40 0.30 0.75 0.25 48
+esfera  3.4 -0.75 1.5 0.85 0.80 0.45 0.75 0.30 0.75 0.25 48
+
+# Esferas flotantes: sombras redondas y separadas del objeto
+esfera -2.2  0.60 5.5 0.70 0.95 0.60 0.20 0.30 0.75 0.25 48
+esfera -0.2  1.00 6.5 0.85 0.30 0.75 0.85 0.30 0.75 0.25 48
+esfera  1.8  0.85 7.5 0.75 0.95 0.90 0.35 0.30 0.75 0.25 48
+fin

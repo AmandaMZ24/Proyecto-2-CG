@@ -55,9 +55,16 @@ void escena_inicializar(Escena *escena)
     escena->cap_objetos = ESCENA_CAP_INICIAL;
     escena->objetos = (Objeto *)calloc((size_t)escena->cap_objetos,
     sizeof(Objeto));
+    if (escena->objetos == NULL) {
+        escena->cap_objetos = 0;
+    }
+
     escena->cap_luces = 4;
     escena->num_luces = 0;
     escena->luces = (Luz *)calloc((size_t)escena->cap_luces, sizeof(Luz));
+    if (escena->luces == NULL) {
+        escena->cap_luces = 0;
+    }
 }
 
 const char *escena_error(const Escena *escena)
@@ -175,10 +182,12 @@ void material_defecto(Material *material)
     material->kd = MATERIAL_KD_DEFECTO;
     material->ks = MATERIAL_KS_DEFECTO;
     material->kn = MATERIAL_KN_DEFECTO;
+    material->reflejo = MATERIAL_REFLEJO_DEFECTO;
+    material->transparencia = MATERIAL_TRANSPARENCIA_DEFECTO;
 }
 
 /*
- * Valida los cuatro coeficientes de un material.
+ * Valida los coeficientes de un material.
  * Devuelve 1 si todos los valores son utilizables.
  */
 static int material_valido(const Material *m)
@@ -190,11 +199,38 @@ static int material_valido(const Material *m)
     if (!isfinite(m->ka) || m->ka < 0.0 || m->ka > 1.0 ||
         !isfinite(m->kd) || m->kd < 0.0 || m->kd > 1.0 ||
         !isfinite(m->ks) || m->ks < 0.0 || m->ks > 1.0 ||
-        !isfinite(m->kn) || m->kn <= 0.0) {
+        !isfinite(m->kn) || m->kn <= 0.0 ||
+        !isfinite(m->reflejo) || m->reflejo < 0.0 || m->reflejo > 1.0 ||
+        !isfinite(m->transparencia) || m->transparencia < 0.0 ||
+        m->transparencia > 1.0) {
         return 0;
     }
 
     return 1;
+}
+
+/*
+ * Devuelve un puntero al material del ultimo objeto agregado, o NULL
+ * si la escena esta vacia o el objeto no tiene material.
+ */
+static Material *material_ultimo(Escena *e)
+{
+    Objeto *ultimo;
+
+    if (e == NULL || e->num_objetos <= 0 || e->objetos == NULL) {
+        return NULL;
+    }
+
+    ultimo = &e->objetos[e->num_objetos - 1];
+
+    if (ultimo->tipo == TIPO_ESFERA) {
+        return &ultimo->u.esfera.material;
+    }
+    if (ultimo->tipo == TIPO_POLIGONO) {
+        return &ultimo->u.poligono.material;
+    }
+
+    return NULL;
 }
 
 /* ------------------------------------------------------------------ */
@@ -846,7 +882,10 @@ static int leer_luz(
    LECTURA DE MATERIALES
    =========================================================
    Formato: material <ka> <kd> <ks> <kn>
+            material <ka> <kd> <ks> <kn> <reflejo> <transparencia>
    Se coloca despues del objeto al que debe aplicarse.
+   Con cuatro valores se conservan el reflejo y la transparencia
+   que el objeto ya tuviera (no se reinician).
 */
 
 static int leer_material(
@@ -857,17 +896,23 @@ static int leer_material(
     const char *nombre
 )
 {
+    Material *actual;
     Material material;
+    double   v[2];
 
-    if (!arity_ok(e, n, 5, linea, nombre, "material")) {
+    if (n != 5 && n != 7) {
+        fijar_error(
+            e,
+            linea,
+            nombre,
+            "\"material\" espera 4 argumentos (ka kd ks kn) "
+            "o 6 (mas reflejo transparencia)"
+        );
         return 0;
     }
 
-    if (!a_material(e, tokens, 1, linea, nombre, "material", &material)) {
-        return 0;
-    }
-
-    if (e->num_objetos <= 0) {
+    actual = material_ultimo(e);
+    if (actual == NULL) {
         fijar_error(
             e,
             linea,
@@ -875,6 +920,38 @@ static int leer_material(
             "\"material\" debe ir despues de un objeto"
         );
         return 0;
+    }
+
+    /* Parte del material actual para no borrar reflejo/transparencia. */
+    material = *actual;
+
+    if (!a_material(e, tokens, 1, linea, nombre, "material", &material)) {
+        return 0;
+    }
+
+    if (n == 7) {
+        if (!a_doble(tokens[5], &v[0]) || !a_doble(tokens[6], &v[1])) {
+            fijar_error(
+                e,
+                linea,
+                nombre,
+                "\"material\" necesita reflejo y transparencia numericos "
+                "en [0, 1]"
+            );
+            return 0;
+        }
+        material.reflejo = v[0];
+        material.transparencia = v[1];
+
+        if (!material_valido(&material)) {
+            fijar_error(
+                e,
+                linea,
+                nombre,
+                "reflejo y transparencia deben estar en [0, 1]"
+            );
+            return 0;
+        }
     }
 
     if (!escena_aplicar_material(e, material)) {
@@ -885,6 +962,57 @@ static int leer_material(
             "no se pudo aplicar el material"
         );
         return 0;
+    }
+
+    return 1;
+}
+
+/* =========================================================
+   LECTURA DE PROPIEDADES OPTICAS DEL ULTIMO OBJETO
+   =========================================================
+   Formato: espejo <reflejo>            (0 = opaco, 1 = espejo)
+            transparencia <transparencia>  (0 = opaco, 1 = transparente)
+   Se colocan despues del objeto al que aplican, como "material".
+*/
+
+static int leer_propiedad_optica(
+    Escena *e,
+    char *tokens[],
+    int n,
+    int linea,
+    const char *nombre,
+    int es_reflejo
+)
+{
+    const char *clave = es_reflejo ? "espejo" : "transparencia";
+    Material   *material;
+    double      valor;
+
+    if (!arity_ok(e, n, 2, linea, nombre, clave)) {
+        return 0;
+    }
+
+    if (!a_doble(tokens[1], &valor) || valor < 0.0 || valor > 1.0) {
+        char motivo[160];
+        snprintf(motivo, sizeof(motivo),
+                 "\"%s\" necesita un valor en [0, 1]", clave);
+        fijar_error(e, linea, nombre, motivo);
+        return 0;
+    }
+
+    material = material_ultimo(e);
+    if (material == NULL) {
+        char motivo[160];
+        snprintf(motivo, sizeof(motivo),
+                 "\"%s\" debe ir despues de un objeto", clave);
+        fijar_error(e, linea, nombre, motivo);
+        return 0;
+    }
+
+    if (es_reflejo) {
+        material->reflejo = valor;
+    } else {
+        material->transparencia = valor;
     }
 
     return 1;
@@ -989,6 +1117,24 @@ int escena_leer_flujo(Escena *escena, FILE *flujo, const char *nombre)
         if (strcmp(tokens[0], "material") == 0)
         {
             if (!leer_material(escena, tokens, n, num_linea, nombre)) {
+                return 0;
+            }
+            continue;
+        }
+
+        /* Convertir el ultimo objeto en espejo */
+        if (strcmp(tokens[0], "espejo") == 0)
+        {
+            if (!leer_propiedad_optica(escena, tokens, n, num_linea, nombre, 1)) {
+                return 0;
+            }
+            continue;
+        }
+
+        /* Hacer transparente el ultimo objeto */
+        if (strcmp(tokens[0], "transparencia") == 0)
+        {
+            if (!leer_propiedad_optica(escena, tokens, n, num_linea, nombre, 0)) {
                 return 0;
             }
             continue;
@@ -1101,4 +1247,7 @@ void escena_liberar(Escena *escena)
 
     free(escena->luces);
 
+    escena->luces = NULL;
+    escena->num_luces = 0;
+    escena->cap_luces = 0;
 }

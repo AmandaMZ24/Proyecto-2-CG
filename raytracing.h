@@ -13,7 +13,15 @@ int First_Intersection(const Escena *escena, Vec3 origen, Vec3 direccion,
 /*
  * Calcula el color visible de un rayo: interseccion mas cercana +
  * modelo de iluminacion completo (ambiental, difusa de Lambert,
- * especular de Phong, sombras) segun el material de cada objeto.
+ * especular de Phong, sombras atenuadas por transparencia) segun el
+ * material de cada objeto.
+ *
+ * Si el material lo indica, el rayo continua en recursion:
+ *   - transparencia: se mezcla con lo que se ve detras del objeto,
+ *     sin refraccion (el rayo conserva su direccion);
+ *   - reflejo: se mezcla con el rayo reflejado sobre la normal.
+ * La recursion esta limitada a una profundidad fija.
+ *
  * Si el rayo no golpea nada devuelve escena->fondo.
  */
 Color De_Que_Color(const Escena *escena, Vec3 origen, Vec3 direccion);

@@ -45,22 +45,43 @@ typedef struct {
  *   ks  coeficiente de reflexion especular  -> brillo de Phong
  *   kn  exponente de brillo                 -> tamano del brillo
  *
+ *   reflejo        0 = superficie opaca, 1 = espejo perfecto.
+ *                  Fraccion del color que se sustituye por el rayo
+ *                  reflejado (recursion).
+ *   transparencia  0 = superficie opaca, 1 = deja pasar toda la luz.
+ *                  Fraccion del color que se sustituye por lo que se
+ *                  ve detras de la superficie, SIN refraccion (el rayo
+ *                  no se desvia); el color del objeto tiñe ese fondo
+ *                  (cristal de color).
+ *
  * Modelo aplicado por raytracing.c:
  *
- *   I = ka*Ia + SUM_luz( kd*Ip*Fatt*(N.L) ) + SUM_luz( ks*Ip*Fatt*(R.V)^kn )
+ *   local = ka*Ia + SUM_luz( Fatt*( kd*Ip*(N.L) + ks*Ip*(R.V)^kn ) )
+ *
+ *   a_traves  = color visto detras del objeto (mismo rayo, sin
+ *               refraccion), multiplicado por el color base del objeto
+ *   reflejado = color del rayo reflejado sobre la normal
+ *
+ *   color = (1 - reflejo) * [ (1 - transparencia) * local
+ *                           +   transparencia     * a_traves ]
+ *         + reflejo * reflejado
  */
 typedef struct {
     double ka;
     double kd;
     double ks;
     double kn;
+    double reflejo;
+    double transparencia;
 } Material;
 
 /* Valores por defecto usados cuando el archivo no especifica material. */
-#define MATERIAL_KA_DEFECTO  0.3
-#define MATERIAL_KD_DEFECTO  0.8
-#define MATERIAL_KS_DEFECTO  0.6
-#define MATERIAL_KN_DEFECTO  48.0
+#define MATERIAL_KA_DEFECTO         0.3
+#define MATERIAL_KD_DEFECTO         0.8
+#define MATERIAL_KS_DEFECTO         0.6
+#define MATERIAL_KN_DEFECTO         48.0
+#define MATERIAL_REFLEJO_DEFECTO    0.0
+#define MATERIAL_TRANSPARENCIA_DEFECTO 0.0
 
 /* ------------------------------------------------------------------ */
 /* Tipos de objeto                                                     */

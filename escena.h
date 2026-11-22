@@ -14,7 +14,9 @@
  *   luz         <x> <y> <z> <intensidad>
  *   esfera      <cx> <cy> <cz> <radio> <r> <g> <b> [<ka> <kd> <ks> <kn>]
  *   poligono    <n> <x1> <y1> <z1> ... <xn> <yn> <zn> <r> <g> <b> [<ka> <kd> <ks> <kn>]
- *   material    <ka> <kd> <ks> <kn>        (aplica al ultimo objeto)
+ *   material    <ka> <kd> <ks> <kn> [<reflejo> <transparencia>]
+ *   espejo      <reflejo>                 (aplica al ultimo objeto)
+ *   transparencia <transparencia>         (aplica al ultimo objeto)
  *   ... (minimo 8 esferas)
  *   fin
  *
@@ -34,10 +36,27 @@
  *   ks   reflexion especular,  en [0, 1]
  *   kn   exponente de brillo,  > 0 (tipico: 8 - 256)
  *
- * Pueden escribirse al final de la linea del objeto o, para reutilizar el
- * mismo material en varios objetos, en una linea "material" separada que
- * se coloca DESPUES del objeto al que aplica. Si no se indican, se usan
- * los valores por defecto (0.3, 0.8, 0.6, 48).
+ * Ademas, cada objeto tiene dos propiedades opticas, ambas en [0, 1]
+ * y con valor por defecto 0 (superficie opaca):
+ *
+ *   reflejo        0 = opaco, 1 = espejo perfecto. Fraccion del color
+ *                  sustituida por el del rayo reflejado.
+ *   transparencia  0 = opaco, 1 = totalmente transparente. Fraccion del
+ *                  color sustituida por lo que se ve detras del objeto,
+ *                  sin refraccion (el rayo no se desvia).
+ *
+ * Pueden escribirse al final de la linea del objeto (solo los cuatro
+ * coeficientes) o, para reutilizar el mismo material en varios objetos,
+ * en lineas separadas DESPUES del objeto al que aplican:
+ *
+ *   material <ka> <kd> <ks> <kn> [<reflejo> <transparencia>]
+ *   espejo <reflejo>
+ *   transparencia <transparencia>
+ *
+ * "material" con cuatro valores conserva el reflejo y la transparencia
+ * que el objeto ya tuviera. "espejo" y "transparencia" solo cambian
+ * su propia propiedad. Si no se indican, se usan los valores por
+ * defecto (0.3, 0.8, 0.6, 48, 0, 0).
  */
 #ifndef ESCENA_H
 #define ESCENA_H

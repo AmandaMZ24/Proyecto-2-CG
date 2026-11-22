@@ -1,0 +1,25 @@
+# Prueba de iluminacion DIFUSA pura (Lambert).
+# ks = 0 en todos los objetos: no debe haber brillos especulares,
+# solo el degradado suave que depende de N.L y de la atenuacion.
+resolucion 640 360
+ojo 0 0 -5
+ventana -3.2 -1.8 3.2 1.8
+fondo 0.10 0.12 0.18
+ambiente 0.20
+luz -3.5 4.5 -3.0 1.0
+
+# Suelo
+poligono 4 -12 -1.6 -4  12 -1.6 -4  12 -1.6 8  -12 -1.6 8 0.50 0.50 0.55 0.30 0.70 0 24
+
+# Fila delantera (descansando sobre el suelo, y = -1.6 + radio)
+esfera -2.4 -0.70 1.5 0.90 0.90 0.25 0.20 0.30 0.80 0 32
+esfera -0.8 -0.90 2.5 0.70 0.95 0.75 0.15 0.30 0.80 0 32
+esfera  0.8 -0.80 1.8 0.80 0.25 0.55 0.90 0.30 0.80 0 32
+esfera  2.4 -0.95 2.8 0.65 0.45 0.85 0.35 0.30 0.80 0 32
+
+# Fila trasera
+esfera -1.8 -0.85 5.0 0.75 0.35 0.80 0.45 0.30 0.80 0 32
+esfera -0.2 -0.80 6.0 0.80 0.90 0.45 0.65 0.30 0.80 0 32
+esfera  1.4 -0.90 5.5 0.70 0.30 0.75 0.55 0.30 0.80 0 32
+esfera  2.8 -0.75 6.5 0.85 0.85 0.80 0.45 0.30 0.80 0 32
+fin

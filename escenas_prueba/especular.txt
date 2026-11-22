@@ -1,0 +1,25 @@
+# Prueba del BRILLO ESPECULAR de Phong.
+# ks = 1 en todas las esferas, con exponentes kn distintos:
+# kn bajo = brillo amplio; kn alto = brillo puntual y concentrado.
+resolucion 640 360
+ojo 0 0 -5
+ventana -3.2 -1.8 3.2 1.8
+fondo 0.05 0.06 0.10
+ambiente 0.10
+luz -3.0 4.5 -4.0 1.0
+
+# Suelo con un poco de brillo propio (ks > 0)
+poligono 4 -12 -1.6 -4  12 -1.6 -4  12 -1.6 8  -12 -1.6 8 0.35 0.35 0.40 0.30 0.60 0.35 24
+
+# Esferas blancas: el brillo se ve mejor sobre blanco
+esfera -2.4 -0.70 1.5 0.90 0.95 0.95 0.95 0.15 0.45 1 8
+esfera -0.8 -0.90 2.5 0.70 0.95 0.95 0.95 0.15 0.45 1 32
+esfera  0.8 -0.80 1.8 0.80 1.00 1.00 1.00 0.15 0.45 1 64
+esfera  2.4 -0.95 2.8 0.65 1.00 1.00 1.00 0.15 0.45 1 128
+esfera -1.8 -0.85 5.0 0.75 0.98 0.98 0.98 0.15 0.45 1 256
+
+# Esferas de color: mismo ks, distinto kn
+esfera -0.2 -0.80 6.0 0.80 0.90 0.35 0.25 0.15 0.50 1 64
+esfera  1.4 -0.90 5.5 0.70 0.30 0.55 0.95 0.15 0.50 1 96
+esfera  2.8 -0.75 6.5 0.85 0.40 0.85 0.45 0.15 0.50 1 48
+fin

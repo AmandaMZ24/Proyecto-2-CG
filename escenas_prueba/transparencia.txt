@@ -1,0 +1,37 @@
+# Prueba de TRANSPARENCIA NO REFRRACTIVA.
+# Los objetos con "transparencia" dejan ver lo que hay detras sin
+# desviar el rayo; su color tiñe lo que se atraviesa (cristal de
+# color). Se comprueba:
+#   - ver las esferas opacas a traves de los cristales,
+#   - el brillo especular del cristal sobre lo que se ve detras,
+#   - la sombra ATENUADA que el cristal flotante proyecta en el suelo
+#     (opaco = sombra total; transparencia 1 = no sombrea).
+resolucion 640 360
+ojo 0 0 -5
+ventana -3.2 -1.8 3.2 1.8
+fondo 0.42 0.47 0.58
+ambiente 0.35
+luz -3.5 5.5 -4.0 1.0
+
+# Suelo claro: la sombra atenuada del cristal debe notarse
+poligono 4 -12 -1.6 -4  12 -1.6 -4  12 -1.6 10  -12 -1.6 10 0.72 0.72 0.75 0.30 0.70 0.25 24
+
+# --- Esferas opacas detras de los cristales ---
+esfera -2.6 -0.60 5.0 1.00 0.95 0.45 0.20 0.30 0.80 0.30 48
+esfera -0.6 -0.55 6.0 1.05 0.35 0.60 0.95 0.30 0.80 0.30 48
+esfera  1.6 -0.85 4.5 0.75 0.95 0.90 0.35 0.30 0.80 0.30 48
+esfera  3.6 -0.75 6.0 0.85 0.50 0.85 0.55 0.30 0.80 0.30 48
+esfera -4.6 -0.90 6.5 0.70 0.90 0.45 0.75 0.30 0.80 0.30 48
+
+# --- Cristales alineados frente a las opertas: el rayo pasa primero
+#     por el cristal y despues por la esfera detras ---
+esfera -1.7 -0.75 2.5 0.85 0.75 0.95 1.00 0.35 0.55 0.90 96
+transparencia 0.75
+esfera -0.4 -0.85 3.0 0.75 1.00 0.90 0.75 0.35 0.55 0.90 96
+transparencia 0.75
+
+# --- Cristal flotando: su sombra en el suelo queda atenuada;
+#     la esfera opaca de la derecha proyecta sombra total ---
+esfera  1.4  0.85 1.8 0.70 0.85 1.00 0.95 0.35 0.55 0.90 96
+transparencia 0.70
+fin

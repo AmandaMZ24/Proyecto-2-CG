@@ -1,0 +1,35 @@
+# Prueba de ESPEJOS (reflexion recursiva de rayos).
+#   - "espejo 1" en la esfera central: refleja todo lo que tiene
+#     enfrente (las esferas flotantes y el suelo).
+#   - Suelo con "espejo 0.7": refleja los objetos y aun asi conserva
+#     su propia iluminacion (y sus sombras) en un 30%.
+resolucion 640 360
+ojo 0 0 -5
+ventana -3.2 -1.8 3.2 1.8
+fondo 0.25 0.28 0.38
+ambiente 0.30
+luz -3.0 5.5 -4.0 1.0
+luz  4.0 4.0 -2.0 0.5
+
+# Suelo semiespejo: 70% reflejo, 30% material propio
+poligono 4 -12 -1.6 -4  12 -1.6 -4  12 -1.6 10  -12 -1.6 10 0.50 0.50 0.55 0.30 0.65 0.30 24
+espejo 0.7
+
+# --- La gran esfera espejo (reflejo = 1: solo se ve lo reflejado) ---
+esfera -0.3 -0.45 4.0 1.15 1 1 1 0.20 0.50 0.80 64
+espejo 1
+
+# --- Esferas flotantes EXACTAMENTE enfrente del espejo: son las que
+#     la esfera espejo debe devolver en su superficie ---
+esfera -1.0  0.75 1.8 0.55 0.95 0.85 0.25 0.30 0.75 0.70 64
+esfera  0.5  1.15 2.4 0.50 0.95 0.45 0.35 0.30 0.75 0.70 64
+esfera -0.6 -0.10 1.2 0.45 0.40 0.75 0.95 0.30 0.75 0.70 64
+
+# --- Esferas sobre el suelo: aparecen en el reflejo del suelo y en
+#     el borde de la esfera espejo ---
+esfera -2.5 -0.90 1.5 0.70 0.95 0.35 0.25 0.30 0.75 0.60 64
+esfera  2.5 -0.95 2.0 0.65 0.30 0.55 0.95 0.30 0.75 0.60 64
+esfera -3.6 -0.80 5.5 0.80 0.85 0.45 0.85 0.30 0.75 0.50 64
+esfera  3.2 -0.85 6.0 0.75 0.45 0.85 0.90 0.30 0.75 0.50 64
+esfera -4.6 -0.95 7.0 0.65 0.95 0.70 0.30 0.30 0.75 0.50 64
+fin

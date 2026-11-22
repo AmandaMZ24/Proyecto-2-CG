@@ -1,0 +1,45 @@
+# Prueba de INTERACCION entre efectos:
+#   - el espejo refleja objetos transparentes (y al reves),
+#   - el cristal deja ver el suelo con su reflejo atraves,
+#   - la sombra opaca se proyecta sobre un suelo espejo,
+#   - el cristal flotante proyecta una sombra atenuada,
+#   - brillo especular en todas las superficies, cristal incluido.
+resolucion 640 360
+ojo 0 0 -5
+ventana -3.2 -1.8 3.2 1.8
+fondo 0.30 0.33 0.44
+ambiente 0.28
+luz -4.0 5.5 -4.0 1.0
+luz  4.5 4.5 -3.0 0.55
+
+# Suelo espejo (75%): recibe sombras y a la vez refleja los objetos
+poligono 4 -12 -1.6 -4  12 -1.6 -4  12 -1.6 10  -12 -1.6 10 0.48 0.48 0.53 0.30 0.65 0.35 24
+espejo 0.75
+
+# --- Esfera espejo: refleja el cristal y las flotantes de colores ---
+esfera -2.3 -0.45 3.8 1.15 1 1 1 0.20 0.50 0.90 96
+espejo 1
+
+# --- Esferas coloridas flotando EN FRENTE del espejo: aparecen en su
+#     superficie reflejada y proyectan sombra sobre el suelo espejo ---
+esfera -1.6  0.85 1.6 0.60 0.95 0.45 0.30 0.30 0.75 0.65 64
+esfera -0.2  1.30 2.6 0.55 0.95 0.90 0.35 0.30 0.75 0.65 64
+
+# --- Esfera de cristal delante del espejo: el espejo la refleja y a
+#     traves de ella se ve el suelo con su reflejo ---
+esfera  0.7 -0.80 2.2 0.85 0.75 0.95 1.00 0.30 0.50 0.95 128
+transparencia 0.78
+
+# --- Cristal flotando: sombra atenuada (no total) debajo ---
+esfera  2.4  0.95 1.6 0.65 1.00 0.90 0.85 0.30 0.50 0.95 128
+transparencia 0.72
+
+# --- Esfera opaca: sombra REAL sobre el suelo espejo ---
+esfera  2.6 -0.75 4.8 0.85 0.95 0.55 0.25 0.30 0.75 0.65 64
+
+# --- Mas objetos de colores para alimentar los reflejos ---
+esfera -0.8 -0.95 6.0 0.65 0.35 0.65 0.95 0.30 0.75 0.55 64
+esfera  4.0 -0.70 6.5 0.90 0.85 0.40 0.85 0.30 0.75 0.55 64
+esfera -4.4 -0.85 6.0 0.75 0.55 0.90 0.45 0.30 0.75 0.55 64
+esfera  1.2 -1.05 7.0 0.55 0.98 0.98 0.98 0.25 0.60 0.85 128
+fin
