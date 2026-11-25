@@ -127,4 +127,8 @@ int escena_num_esferas(const Escena *escena);
 /* Libera la memoria dinamica de la escena. Seguro de llamar mas de una vez. */
 void escena_liberar(Escena *escena);
 
+int escena_agregar_disco(Escena *escena, Vec3 centro, Vec3 normal, double radio, Color color, Material material);
+
+int escena_agregar_elipse( Escena *escena, Vec3 foco1, Vec3 foco2, Vec3 normal, double distancia_maxima, Color color, Material material);
+
 #endif /* ESCENA_H */

@@ -7,6 +7,7 @@
  */
 #include "escena.h"
 #include "poligonos.h"
+#include "vectores.h"
 
 #include <ctype.h>
 #include <errno.h>
@@ -215,27 +216,64 @@ static int material_valido(const Material *m)
  */
 static Material *material_ultimo(Escena *e)
 {
-    Objeto *ultimo;
+    if (e == NULL ||
+        e->num_objetos <= 0 ||
+        e->objetos == NULL) {
 
-    if (e == NULL || e->num_objetos <= 0 || e->objetos == NULL) {
         return NULL;
     }
 
-    ultimo = &e->objetos[e->num_objetos - 1];
+    Objeto *ultimo = &e->objetos[e->num_objetos - 1];
 
-    if (ultimo->tipo == TIPO_ESFERA) {
-        return &ultimo->u.esfera.material;
-    }
-    if (ultimo->tipo == TIPO_POLIGONO) {
-        return &ultimo->u.poligono.material;
-    }
+    switch (ultimo->tipo) {
 
-    return NULL;
+        case TIPO_ESFERA:
+            return &ultimo->u.esfera.material;
+
+        case TIPO_POLIGONO:
+            return &ultimo->u.poligono.material;
+
+        case TIPO_DISCO:
+            return &ultimo->u.disco.material;
+
+        case TIPO_ELIPSE:
+            return &ultimo->u.elipse.material;
+
+        default:
+            return NULL;
+    }
 }
 
 /* ------------------------------------------------------------------ */
 /* Carga de objetos                                                    */
 /* ------------------------------------------------------------------ */
+static Objeto *reservar_objeto(Escena *escena)
+{
+    if (escena == NULL) {
+        return NULL;
+    }
+
+    if (escena->num_objetos >= escena->cap_objetos) {
+
+        int nueva_cap = escena->cap_objetos > 0
+            ? escena->cap_objetos * 2
+            : ESCENA_CAP_INICIAL;
+
+        Objeto *crecido = realloc(
+            escena->objetos,
+            (size_t)nueva_cap * sizeof(Objeto)
+        );
+
+        if (crecido == NULL) {
+            return NULL;
+        }
+
+        escena->objetos = crecido;
+        escena->cap_objetos = nueva_cap;
+    }
+
+    return &escena->objetos[escena->num_objetos];
+}
 
 int escena_agregar_esfera(Escena *escena, Vec3 centro, double radio,
                           Color color, Material material)
@@ -370,30 +408,120 @@ int escena_agregar_poligono(
     return 1;
 }
 
+int escena_agregar_disco(
+    Escena *escena,
+    Vec3 centro,
+    Vec3 normal,
+    double radio,
+    Color color,
+    Material material
+)
+{
+    const double EPSILON = 1e-9;
+
+    if (escena == NULL ||
+        !material_valido(&material) ||
+        !isfinite(radio) ||
+        radio <= 0.0 ||
+        vec_longitud(normal) <= EPSILON) {
+
+        return 0;
+    }
+
+    Objeto *nuevo = reservar_objeto(escena);
+
+    if (nuevo == NULL) {
+        return 0;
+    }
+
+    nuevo->tipo = TIPO_DISCO;
+    nuevo->u.disco.centro = centro;
+    nuevo->u.disco.normal = vec_normalizar(normal);
+    nuevo->u.disco.radio = radio;
+    nuevo->u.disco.color = color;
+    nuevo->u.disco.material = material;
+
+    escena->num_objetos++;
+
+    return 1;
+}
+
+int escena_agregar_elipse(
+    Escena *escena,
+    Vec3 foco1,
+    Vec3 foco2,
+    Vec3 normal,
+    double distancia_maxima,
+    Color color,
+    Material material
+)
+{
+    const double EPSILON = 1e-9;
+
+    if (escena == NULL ||
+        !material_valido(&material) ||
+        !isfinite(distancia_maxima) ||
+        distancia_maxima <= 0.0 ||
+        vec_longitud(normal) <= EPSILON) {
+
+        return 0;
+    }
+
+    normal = vec_normalizar(normal);
+
+    Vec3 diferencia = vec_restar(foco2, foco1);
+
+    double distancia_focos = vec_longitud(diferencia);
+
+    /* Evitar elipses degeneradas */
+    if (distancia_maxima <= distancia_focos + EPSILON) {
+        return 0;
+    }
+
+    /* Validar coplanaridad */
+    if (fabs(vec_punto(normal, diferencia)) > EPSILON) {
+        return 0;
+    }
+
+    Objeto *nuevo = reservar_objeto(escena);
+
+    if (nuevo == NULL) {
+        return 0;
+    }
+
+    nuevo->tipo = TIPO_ELIPSE;
+    nuevo->u.elipse.foco1 = foco1;
+    nuevo->u.elipse.foco2 = foco2;
+    nuevo->u.elipse.normal = normal;
+    nuevo->u.elipse.distancia_maxima = distancia_maxima;
+    nuevo->u.elipse.color = color;
+    nuevo->u.elipse.material = material;
+
+    escena->num_objetos++;
+
+    return 1;
+}
+
 /* =========================================================
    APLICAR MATERIAL AL ULTIMO OBJETO
    ========================================================= */
 
-int escena_aplicar_material(Escena *escena, Material material)
+int escena_aplicar_material(
+    Escena *escena,
+    Material material
+)
 {
-    if (escena == NULL ||
-        escena->num_objetos <= 0 ||
-        escena->objetos == NULL ||
-        !material_valido(&material)) {
+    if (!material_valido(&material)) {
         return 0;
     }
 
-    Objeto *ultimo = &escena->objetos[escena->num_objetos - 1];
+    Material *destino = material_ultimo(escena);
 
-    if (ultimo->tipo == TIPO_ESFERA) {
-        ultimo->u.esfera.material = material;
-    }
-    else if (ultimo->tipo == TIPO_POLIGONO) {
-        ultimo->u.poligono.material = material;
-    }
-    else {
+    if (destino == NULL) {
         return 0;
     }
+
+    *destino = material;
 
     return 1;
 }
@@ -605,6 +733,162 @@ static int a_material(Escena *e, char *tokens[], int inicio, int linea,
                  "material invalido en \"%s\": ka, kd y ks en [0, 1] "
                  "y kn mayor que cero", clave);
         fijar_error(e, linea, nombre, motivo);
+        return 0;
+    }
+
+    return 1;
+}
+
+static int leer_disco(
+    Escena *e,
+    char *tokens[],
+    int n,
+    int linea,
+    const char *nombre
+)
+{
+    double v[10];
+    Material material;
+
+    if (n != 11 && n != 15) {
+        fijar_error(
+            e, linea, nombre,
+            "cantidad incorrecta de argumentos para disco"
+        );
+
+        return 0;
+    }
+
+    for (int i = 0; i < 10; i++) {
+
+        if (!a_doble(tokens[i + 1], &v[i])) {
+
+            fijar_error(
+                e, linea, nombre,
+                "parametro numerico invalido para disco"
+            );
+
+            return 0;
+        }
+    }
+
+    Vec3 centro = {v[0], v[1], v[2]};
+    Vec3 normal = {v[3], v[4], v[5]};
+    double radio = v[6];
+
+    Color color = {v[7], v[8], v[9]};
+
+    if (color.r < 0.0 || color.r > 1.0 ||
+        color.g < 0.0 || color.g > 1.0 ||
+        color.b < 0.0 || color.b > 1.0) {
+
+        fijar_error(
+            e, linea, nombre,
+            "color del disco fuera de rango"
+        );
+
+        return 0;
+    }
+
+    material_defecto(&material);
+
+    if (n == 15 &&
+        !a_material(
+            e, tokens, 11, linea,
+            nombre, "disco", &material)) {
+
+        return 0;
+    }
+
+    if (!escena_agregar_disco(
+            e, centro, normal,
+            radio, color, material)) {
+
+        fijar_error(
+            e, linea, nombre,
+            "no se pudo agregar el disco"
+        );
+
+        return 0;
+    }
+
+    return 1;
+}
+
+static int leer_elipse(
+    Escena *e,
+    char *tokens[],
+    int n,
+    int linea,
+    const char *nombre
+)
+{
+    double v[13];
+    Material material;
+
+    if (n != 14 && n != 18) {
+
+        fijar_error(
+            e, linea, nombre,
+            "cantidad incorrecta de argumentos para elipse"
+        );
+
+        return 0;
+    }
+
+    for (int i = 0; i < 13; i++) {
+
+        if (!a_doble(tokens[i + 1], &v[i])) {
+
+            fijar_error(
+                e, linea, nombre,
+                "parametro numerico invalido para elipse"
+            );
+
+            return 0;
+        }
+    }
+
+    Vec3 foco1 = {v[0], v[1], v[2]};
+    Vec3 foco2 = {v[3], v[4], v[5]};
+    Vec3 normal = {v[6], v[7], v[8]};
+
+    double distancia_maxima = v[9];
+
+    Color color = {v[10], v[11], v[12]};
+
+    if (color.r < 0.0 || color.r > 1.0 ||
+        color.g < 0.0 || color.g > 1.0 ||
+        color.b < 0.0 || color.b > 1.0) {
+
+        fijar_error(
+            e, linea, nombre,
+            "color de la elipse fuera de rango"
+        );
+
+        return 0;
+    }
+
+    material_defecto(&material);
+
+    if (n == 18 &&
+        !a_material(
+            e, tokens, 14, linea,
+            nombre, "elipse", &material)) {
+
+        return 0;
+    }
+
+    if (!escena_agregar_elipse(
+            e, foco1, foco2,
+            normal, distancia_maxima,
+            color, material)) {
+
+        fijar_error(
+            e, linea, nombre,
+            "no se pudo agregar la elipse"
+        );
+
         return 0;
     }
 
@@ -1102,6 +1386,20 @@ int escena_leer_flujo(Escena *escena, FILE *flujo, const char *nombre)
                 return 0;
             }
             continue;
+        }
+
+        if (strcmp(tokens[0], "disco") == 0) {
+            if (!leer_disco(escena, tokens, n, num_linea, nombre)) {
+                return 0;
+            }
+            continue;
+        }
+        
+        if (strcmp(tokens[0], "elipse") == 0) {
+            if (!leer_elipse(escena, tokens, n, num_linea, nombre)) {
+                return 0;
+            }
+        continue;
         }
 
         /* Leer una fuente de luz */

@@ -89,7 +89,9 @@ typedef struct {
 
 typedef enum {
     TIPO_ESFERA = 0,
-    TIPO_POLIGONO = 1
+    TIPO_POLIGONO = 1,
+    TIPO_DISCO = 2,
+    TIPO_ELIPSE = 3
 } TipoObjeto;
 
 typedef struct {
@@ -107,6 +109,23 @@ typedef struct {
     Material material;
 } Poligono;
 
+typedef struct {
+    Vec3 centro;
+    Vec3 normal;
+    double radio;
+    Color color;
+    Material material;
+} Disco;
+
+typedef struct {
+    Vec3 foco1;
+    Vec3 foco2;
+    Vec3 normal;
+    double distancia_maxima;
+    Color color;
+    Material material;
+} Elipse;
+
 /*
  * Objeto "etiquetado": el campo `tipo` indica que miembro de la union es
  * valido. Nunca se accede a un miembro distinto del que indique `tipo`.
@@ -116,6 +135,8 @@ typedef struct {
     union {
         Esfera esfera;
         Poligono poligono;
+        Disco disco;
+        Elipse elipse;
     } u;
 } Objeto;
 

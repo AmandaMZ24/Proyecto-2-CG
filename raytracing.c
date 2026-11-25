@@ -6,7 +6,8 @@
 #include "escena.h"
 #include "vectores.h"
 #include "poligonos.h"
-
+#include "discos.h"
+#include "elipses.h"
 /*
  * Desplazamiento del origen de los rayos de sombra, reflejados y
  * transparentes respecto a la superficie. Evita la auto-interseccion
@@ -65,22 +66,46 @@ int intersecar_esfera(Vec3 origen, Vec3 direccion, const Esfera *esfera, double 
  * Interseccion de un rayo con un objeto cualquiera de la escena.
  * Devuelve 1 si hay impacto hacia adelante y escribe t.
  */
-static int intersecar_objeto(const Objeto *objeto, Vec3 origen,
-                             Vec3 direccion, double *t)
+static int intersecar_objeto(
+    const Objeto *objeto,
+    Vec3 origen,
+    Vec3 direccion,
+    double *t
+)
 {
     if (objeto == NULL || t == NULL) {
         return 0;
     }
 
-    if (objeto->tipo == TIPO_ESFERA) {
-        return intersecar_esfera(origen, direccion, &objeto->u.esfera, t);
-    }
+    switch (objeto->tipo) {
 
-    if (objeto->tipo == TIPO_POLIGONO) {
-        return intersecar_poligono(origen, direccion, &objeto->u.poligono, t);
-    }
+        case TIPO_ESFERA:
+            return intersecar_esfera(
+                origen, direccion,
+                &objeto->u.esfera, t
+            );
 
-    return 0;
+        case TIPO_POLIGONO:
+            return intersecar_poligono(
+                origen, direccion,
+                &objeto->u.poligono, t
+            );
+
+        case TIPO_DISCO:
+            return intersecar_disco(
+                origen, direccion,
+                &objeto->u.disco, t
+            );
+
+        case TIPO_ELIPSE:
+            return intersecar_elipse(
+                origen, direccion,
+                &objeto->u.elipse, t
+            );
+
+        default:
+            return 0;
+    }
 }
 
 /* ================================================================== */
@@ -151,50 +176,80 @@ int First_Intersection(const Escena *escena, Vec3 origen, Vec3 direccion,
  * Obtiene la normal, el color base y el material del objeto golpeado.
  * La normal siempre queda orientada hacia el lado del que llega el rayo.
  */
-static void datos_de_impacto(const Objeto *objeto, Vec3 punto, Vec3 direccion,
-                             Vec3 *normal, Color *color, Material *material)
+static void datos_de_impacto(
+    const Objeto *objeto,
+    Vec3 punto,
+    Vec3 direccion,
+    Vec3 *normal,
+    Color *color,
+    Material *material
+)
 {
     *normal = (Vec3){0.0, 0.0, 0.0};
-    *color  = (Color){0.0, 0.0, 0.0};
+    *color = (Color){0.0, 0.0, 0.0};
+
     material_defecto(material);
 
     if (objeto == NULL) {
         return;
     }
 
-    if (objeto->tipo == TIPO_ESFERA)
-    {
-        const Esfera *esfera = &objeto->u.esfera;
+    switch (objeto->tipo) {
 
-        /* Vector desde el centro hasta el punto de impacto */
-        *normal = vec_normalizar(vec_restar(punto, esfera->centro));
-        *color  = esfera->color;
-        *material = esfera->material;
-    }
-    else if (objeto->tipo == TIPO_POLIGONO)
-    {
-        const Poligono *poligono = &objeto->u.poligono;
+        case TIPO_ESFERA: {
+            const Esfera *esfera = &objeto->u.esfera;
 
-        /* Normal calculada al cargar el poligono */
-        *normal = poligono->normal;
-        *color  = poligono->color;
-        *material = poligono->material;
+            *normal = vec_normalizar(
+                vec_restar(punto, esfera->centro)
+            );
 
-        if (vec_longitud(*normal) <= 1e-12) {
-            Vec3 n = {0.0, 0.0, 0.0};
-            if (calcular_normal_poligono(poligono, &n)) {
-                *normal = n;
-            }
+            *color = esfera->color;
+            *material = esfera->material;
+            break;
         }
+
+        case TIPO_POLIGONO: {
+            const Poligono *poligono = &objeto->u.poligono;
+
+            *normal = poligono->normal;
+            *color = poligono->color;
+            *material = poligono->material;
+
+            if (vec_longitud(*normal) <= 1e-12) {
+                Vec3 n = {0.0, 0.0, 0.0};
+
+                if (calcular_normal_poligono(poligono, &n)) {
+                    *normal = n;
+                }
+            }
+
+            break;
+        }
+
+        case TIPO_DISCO: {
+            const Disco *disco = &objeto->u.disco;
+
+            *normal = vec_normalizar(disco->normal);
+            *color = disco->color;
+            *material = disco->material;
+            break;
+        }
+
+        case TIPO_ELIPSE: {
+            const Elipse *elipse = &objeto->u.elipse;
+
+            *normal = vec_normalizar(elipse->normal);
+            *color = elipse->color;
+            *material = elipse->material;
+            break;
+        }
+
+        default:
+            return;
     }
 
-    /*
-     * Orientar la normal hacia el lado desde el cual llega el rayo.
-     * Para una esfera vista desde afuera esto no cambia nada; solo
-     * actua cuando el observador queda dentro del objeto.
-     */
-    if (vec_punto(*normal, direccion) > 0.0)
-    {
+    /* Orientar la normal hacia el rayo incidente */
+    if (vec_punto(*normal, direccion) > 0.0) {
         *normal = vec_escalar(*normal, -1.0);
     }
 }
@@ -207,18 +262,30 @@ static void datos_de_impacto(const Objeto *objeto, Vec3 punto, Vec3 direccion,
 static Material material_de(const Objeto *objeto)
 {
     Material material;
+
     material_defecto(&material);
 
     if (objeto == NULL) {
         return material;
     }
-    if (objeto->tipo == TIPO_ESFERA) {
-        return objeto->u.esfera.material;
+
+    switch (objeto->tipo) {
+
+        case TIPO_ESFERA:
+            return objeto->u.esfera.material;
+
+        case TIPO_POLIGONO:
+            return objeto->u.poligono.material;
+
+        case TIPO_DISCO:
+            return objeto->u.disco.material;
+
+        case TIPO_ELIPSE:
+            return objeto->u.elipse.material;
+
+        default:
+            return material;
     }
-    if (objeto->tipo == TIPO_POLIGONO) {
-        return objeto->u.poligono.material;
-    }
-    return material;
 }
 
 /*
