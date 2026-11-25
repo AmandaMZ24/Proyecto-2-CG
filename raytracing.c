@@ -10,6 +10,9 @@
 #include "elipses.h"
 #include "cilindros.h"
 #include "conos.h"
+#include "cuadraticas.h"
+#include "cortes.h"
+#include "ecuaciones.h"
 /*
  * Desplazamiento del origen de los rayos de sombra, reflejados y
  * transparentes respecto a la superficie. Evita la auto-interseccion
@@ -64,6 +67,202 @@ int intersecar_esfera(Vec3 origen, Vec3 direccion, const Esfera *esfera, double 
     return 0;
 }
 
+static int candidatos_con_cortes(
+    const Objeto *objeto,
+    Vec3 origen,
+    Vec3 direccion,
+    double soluciones[2]
+)
+{
+    switch (objeto->tipo) {
+
+        case TIPO_ESFERA: {
+
+            const Esfera *s = &objeto->u.esfera;
+
+            Vec3 W = vec_restar(
+                origen, s->centro
+            );
+
+            double A = vec_punto(
+                direccion, direccion
+            );
+
+            double B = 2.0 * vec_punto(
+                W, direccion
+            );
+
+            double C = vec_punto(W, W)
+                     - s->radio * s->radio;
+
+            return resolver_cuadratica(
+                A, B, C, soluciones
+            );
+        }
+
+        case TIPO_CILINDRO: {
+
+            const Cilindro *c = &objeto->u.cilindro;
+
+            Vec3 Q = vec_normalizar(c->eje);
+
+            Vec3 W = vec_restar(
+                origen, c->ancla
+            );
+
+            Vec3 D_perp = vec_restar(
+                direccion,
+                vec_escalar(
+                    Q, vec_punto(direccion, Q)
+                )
+            );
+
+            Vec3 W_perp = vec_restar(
+                W,
+                vec_escalar(
+                    Q, vec_punto(W, Q)
+                )
+            );
+
+            double A = vec_punto(D_perp, D_perp);
+
+            double B = 2.0 * vec_punto(
+                D_perp, W_perp
+            );
+
+            double C = vec_punto(W_perp, W_perp)
+                     - c->radio * c->radio;
+
+            return resolver_cuadratica(
+                A, B, C, soluciones
+            );
+        }
+
+        case TIPO_CONO: {
+
+            const Cono *c = &objeto->u.cono;
+
+            Vec3 Q = vec_normalizar(c->eje);
+
+            Vec3 W = vec_restar(
+                origen, c->vertice
+            );
+
+            double k = c->n / c->m;
+            double factor = 1.0 + k * k;
+
+            double DQ = vec_punto(direccion, Q);
+            double WQ = vec_punto(W, Q);
+
+            double A =
+                vec_punto(direccion, direccion)
+                - factor * DQ * DQ;
+
+            double B = 2.0 * (
+                vec_punto(W, direccion)
+                - factor * WQ * DQ
+            );
+
+            double C = vec_punto(W, W)
+                     - factor * WQ * WQ;
+
+            return resolver_cuadratica(
+                A, B, C, soluciones
+            );
+        }
+
+        case TIPO_CUADRATICA:
+
+            return intersecciones_cuadratica(
+                origen,
+                direccion,
+                &objeto->u.cuadratica,
+                soluciones
+            );
+
+        case TIPO_POLIGONO:
+
+            return intersecar_poligono(
+                origen,
+                direccion,
+                &objeto->u.poligono,
+                &soluciones[0]
+            );
+
+        case TIPO_DISCO:
+
+            return intersecar_disco(
+                origen,
+                direccion,
+                &objeto->u.disco,
+                &soluciones[0]
+            );
+
+        case TIPO_ELIPSE:
+
+            return intersecar_elipse(
+                origen,
+                direccion,
+                &objeto->u.elipse,
+                &soluciones[0]
+            );
+
+        default:
+            return 0;
+    }
+}
+
+static int punto_en_limites(
+    const Objeto *objeto,
+    Vec3 punto
+)
+{
+    const double EPSILON = 1e-9;
+
+    if (objeto->tipo == TIPO_CILINDRO) {
+
+        const Cilindro *c = &objeto->u.cilindro;
+
+        Vec3 Q = vec_normalizar(c->eje);
+
+        double d = vec_punto(
+            vec_restar(punto, c->ancla),
+            Q
+        );
+
+        return d >= c->d_min - EPSILON &&
+               d <= c->d_max + EPSILON;
+    }
+
+    if (objeto->tipo == TIPO_CONO) {
+
+        const Cono *c = &objeto->u.cono;
+
+        Vec3 Q = vec_normalizar(c->eje);
+
+        double d = vec_punto(
+            vec_restar(punto, c->vertice),
+            Q
+        );
+
+        return d >= c->d_min - EPSILON &&
+               d <= c->d_max + EPSILON &&
+               fabs(d) > EPSILON;
+    }
+
+    if (objeto->tipo == TIPO_CUADRATICA) {
+
+        Vec3 normal = normal_cuadratica(
+            punto,
+            &objeto->u.cuadratica
+        );
+
+        return vec_longitud(normal) > EPSILON;
+    }
+
+    return 1;
+}
+
 /*
  * Interseccion de un rayo con un objeto cualquiera de la escena.
  * Devuelve 1 si hay impacto hacia adelante y escribe t.
@@ -75,49 +274,107 @@ static int intersecar_objeto(
     double *t
 )
 {
+    const double EPSILON = 1e-9;
+
     if (objeto == NULL || t == NULL) {
         return 0;
     }
 
-    switch (objeto->tipo) {
+    /*
+     * Si no existen cortes, conservar los
+     * algoritmos originales.
+     */
+    if (objeto->num_planos_corte == 0 &&
+        objeto->tipo != TIPO_CUADRATICA) {
 
-        case TIPO_ESFERA:
-            return intersecar_esfera(
-                origen, direccion,
-                &objeto->u.esfera, t
-            );
+        switch (objeto->tipo) {
 
-        case TIPO_POLIGONO:
-            return intersecar_poligono(
-                origen, direccion,
-                &objeto->u.poligono, t
-            );
+            case TIPO_ESFERA:
+                return intersecar_esfera(
+                    origen, direccion,
+                    &objeto->u.esfera, t
+                );
 
-        case TIPO_DISCO:
-            return intersecar_disco(
-                origen, direccion,
-                &objeto->u.disco, t
-            );
+            case TIPO_POLIGONO:
+                return intersecar_poligono(
+                    origen, direccion,
+                    &objeto->u.poligono, t
+                );
 
-        case TIPO_ELIPSE:
-            return intersecar_elipse(
-                origen, direccion,
-                &objeto->u.elipse, t
-            );
-        case TIPO_CILINDRO:
-            return intersecar_cilindro(
-                origen, direccion,
-                &objeto->u.cilindro, t
-            );
-        case TIPO_CONO:
-            return intersecar_cono(
-                origen, direccion,
-                &objeto->u.cono, t
-            );
+            case TIPO_DISCO:
+                return intersecar_disco(
+                    origen, direccion,
+                    &objeto->u.disco, t
+                );
 
-        default:
-            return 0;
+            case TIPO_ELIPSE:
+                return intersecar_elipse(
+                    origen, direccion,
+                    &objeto->u.elipse, t
+                );
+
+            case TIPO_CILINDRO:
+                return intersecar_cilindro(
+                    origen, direccion,
+                    &objeto->u.cilindro, t
+                );
+
+            case TIPO_CONO:
+                return intersecar_cono(
+                    origen, direccion,
+                    &objeto->u.cono, t
+                );
+
+            default:
+                return 0;
+        }
     }
+
+    /*
+     * Obtener todas las intersecciones
+     * cuando existen cortes o cuadraticas.
+     */
+    double soluciones[2];
+
+    int cantidad = candidatos_con_cortes(
+        objeto,
+        origen,
+        direccion,
+        soluciones
+    );
+
+    for (int i = 0; i < cantidad; i++) {
+
+        double candidato = soluciones[i];
+
+        if (!isfinite(candidato) ||
+            candidato <= EPSILON) {
+
+            continue;
+        }
+
+        Vec3 punto = punto_en_rayo(
+            origen,
+            direccion,
+            candidato
+        );
+
+        /* Validar los limites de la figura */
+        if (!punto_en_limites(objeto, punto)) {
+            continue;
+        }
+
+        /* Validar todos los planos de corte */
+        if (!punto_valido_cortes(punto, objeto)) {
+            continue;
+        }
+
+        *t = candidato;
+
+        return 1;
+    }
+
+    return 0;
 }
 
 /* ================================================================== */
@@ -274,6 +531,15 @@ static void datos_de_impacto(
             break;
         }
 
+        case TIPO_CUADRATICA: {
+            const Cuadratica *s = &objeto->u.cuadratica;
+
+            *normal = normal_cuadratica(punto, s);
+            *color = s->color;
+            *material = s->material;
+            break;
+        }
+
         default:
             return;
     }
@@ -312,10 +578,17 @@ static Material material_de(const Objeto *objeto)
 
         case TIPO_ELIPSE:
             return objeto->u.elipse.material;
+       
         case TIPO_CILINDRO:
             return objeto->u.cilindro.material;
+      
         case TIPO_CONO:
             return objeto->u.cono.material;
+        
+        case TIPO_CUADRATICA:
+            return objeto->u.cuadratica.material;
+
+        
         default:
             return material;
     }

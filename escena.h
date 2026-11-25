@@ -135,4 +135,7 @@ int escena_agregar_cilindro(Escena *escena, Vec3 ancla, Vec3 eje, double radio, 
 
 int escena_agregar_cono(Escena *escena, Vec3 vertice, Vec3 eje, double m, double n, double d_min, double d_max, Color color, Material material);
 
+int escena_agregar_cuadratica(Escena *escena, Cuadratica superficie);
+
+int escena_agregar_plano_corte(Escena *escena, PlanoCorte plano);
 #endif /* ESCENA_H */

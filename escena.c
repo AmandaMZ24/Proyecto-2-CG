@@ -244,6 +244,9 @@ static Material *material_ultimo(Escena *e)
         
         case TIPO_CONO:
             return &ultimo->u.cono.material;
+
+        case TIPO_CUADRATICA:
+            return &ultimo->u.cuadratica.material;
         
         default:
             return NULL;
@@ -306,6 +309,7 @@ int escena_agregar_esfera(Escena *escena, Vec3 centro, double radio,
 
     nuevo = &escena->objetos[escena->num_objetos];
     nuevo->tipo       = TIPO_ESFERA;
+    nuevo->num_planos_corte = 0;
     nuevo->u.esfera.centro = centro;
     nuevo->u.esfera.radio  = radio;
     nuevo->u.esfera.color  = color;
@@ -403,6 +407,7 @@ int escena_agregar_poligono(
     /*Agregar el nuevo objeto*/
     Objeto *nuevo = &escena->objetos[escena->num_objetos];
     nuevo->tipo = TIPO_POLIGONO;
+    nuevo->num_planos_corte = 0;
     nuevo->u.poligono.vertices = copia;
     nuevo->u.poligono.num_vertices = num_vertices;
     nuevo->u.poligono.normal = normal;
@@ -441,6 +446,7 @@ int escena_agregar_disco(
     }
 
     nuevo->tipo = TIPO_DISCO;
+    nuevo->num_planos_corte = 0;
     nuevo->u.disco.centro = centro;
     nuevo->u.disco.normal = vec_normalizar(normal);
     nuevo->u.disco.radio = radio;
@@ -496,6 +502,7 @@ int escena_agregar_elipse(
     }
 
     nuevo->tipo = TIPO_ELIPSE;
+    nuevo->num_planos_corte = 0;
     nuevo->u.elipse.foco1 = foco1;
     nuevo->u.elipse.foco2 = foco2;
     nuevo->u.elipse.normal = normal;
@@ -540,6 +547,7 @@ int escena_agregar_cilindro(
     }
 
     nuevo->tipo = TIPO_CILINDRO;
+    nuevo->num_planos_corte = 0;
     nuevo->u.cilindro.ancla = ancla;
     nuevo->u.cilindro.eje = vec_normalizar(eje);
     nuevo->u.cilindro.radio = radio;
@@ -588,6 +596,7 @@ int escena_agregar_cono(
     }
 
     nuevo->tipo = TIPO_CONO;
+    nuevo->num_planos_corte = 0;
     nuevo->u.cono.vertice = vertice;
     nuevo->u.cono.eje = vec_normalizar(eje);
     nuevo->u.cono.m = m;
@@ -602,6 +611,120 @@ int escena_agregar_cono(
     return 1;
 }
 
+int escena_agregar_cuadratica(
+    Escena *escena,
+    Cuadratica superficie
+)
+{
+    if (escena == NULL ||
+        !material_valido(&superficie.material)) {
+
+        return 0;
+    }
+
+    double coeficientes[] = {
+        superficie.A,
+        superficie.B,
+        superficie.C,
+        superficie.D,
+        superficie.E,
+        superficie.F,
+        superficie.G,
+        superficie.H,
+        superficie.I,
+        superficie.J
+    };
+
+    int tiene_termino_variable = 0;
+
+    for (int i = 0; i < 10; i++) {
+
+        if (!isfinite(coeficientes[i])) {
+            return 0;
+        }
+
+        if (i < 9 && coeficientes[i] != 0.0) {
+            tiene_termino_variable = 1;
+        }
+    }
+
+    /* Rechazar ecuaciones constantes */
+    if (!tiene_termino_variable) {
+        return 0;
+    }
+
+    Objeto *nuevo = reservar_objeto(escena);
+
+    if (nuevo == NULL) {
+        return 0;
+    }
+
+    *nuevo = (Objeto){0};
+
+    nuevo->tipo = TIPO_CUADRATICA;
+    nuevo->u.cuadratica = superficie;
+
+    escena->num_objetos++;
+
+    return 1;
+}
+
+int escena_agregar_plano_corte(
+    Escena *escena,
+    PlanoCorte plano
+)
+{
+    const double EPSILON = 1e-9;
+
+    if (escena == NULL ||
+        escena->objetos == NULL ||
+        escena->num_objetos <= 0) {
+
+        return 0;
+    }
+
+    if (!isfinite(plano.A) ||
+        !isfinite(plano.B) ||
+        !isfinite(plano.C) ||
+        !isfinite(plano.D)) {
+
+        return 0;
+    }
+
+    Objeto *ultimo =
+        &escena->objetos[escena->num_objetos - 1];
+
+    if (ultimo->num_planos_corte < 0 ||
+        ultimo->num_planos_corte >= MAX_PLANOS_CORTE) {
+
+        return 0;
+    }
+
+    /* Normalizar los coeficientes del plano */
+    double longitud = hypot(
+        hypot(plano.A, plano.B),
+        plano.C
+    );
+
+    if (!isfinite(longitud) ||
+        longitud <= EPSILON) {
+        return 0;
+    }
+
+    plano.A /= longitud;
+    plano.B /= longitud;
+    plano.C /= longitud;
+    plano.D /= longitud;
+
+    /* Guardar el plano en el ultimo objeto */
+    ultimo->planos_corte[
+        ultimo->num_planos_corte
+    ] = plano;
+
+    ultimo->num_planos_corte++;
+
+    return 1;
+}
 /* =========================================================
    APLICAR MATERIAL AL ULTIMO OBJETO
    ========================================================= */
@@ -1158,6 +1281,143 @@ static int leer_cono(
     return 1;
 }
 
+static int leer_cuadratica(
+    Escena *e,
+    char *tokens[],
+    int n,
+    int linea,
+    const char *nombre
+)
+{
+    double v[13];
+
+    if (n != 14 && n != 18) {
+
+        fijar_error(
+            e, linea, nombre,
+            "cantidad incorrecta de argumentos para cuadratica"
+        );
+
+        return 0;
+    }
+
+    for (int i = 0; i < 13; i++) {
+
+        if (!a_doble(tokens[i + 1], &v[i])) {
+
+            fijar_error(
+                e, linea, nombre,
+                "parametro numerico invalido para cuadratica"
+            );
+
+            return 0;
+        }
+    }
+
+    Cuadratica superficie = {0};
+
+    superficie.A = v[0];
+    superficie.B = v[1];
+    superficie.C = v[2];
+    superficie.D = v[3];
+    superficie.E = v[4];
+    superficie.F = v[5];
+    superficie.G = v[6];
+    superficie.H = v[7];
+    superficie.I = v[8];
+    superficie.J = v[9];
+
+    superficie.color = (Color){
+        v[10], v[11], v[12]
+    };
+
+    if (v[10] < 0.0 || v[10] > 1.0 ||
+        v[11] < 0.0 || v[11] > 1.0 ||
+        v[12] < 0.0 || v[12] > 1.0) {
+
+        fijar_error(
+            e, linea, nombre,
+            "color de la cuadratica fuera de rango"
+        );
+
+        return 0;
+    }
+
+    material_defecto(&superficie.material);
+
+    if (n == 18 &&
+        !a_material(
+            e, tokens, 14, linea,
+            nombre, "cuadratica",
+            &superficie.material)) {
+
+        return 0;
+    }
+
+    if (!escena_agregar_cuadratica(
+            e, superficie)) {
+
+        fijar_error(
+            e, linea, nombre,
+            "no se pudo agregar la cuadratica"
+        );
+
+        return 0;
+    }
+
+    return 1;
+}
+
+static int leer_corte(
+    Escena *e,
+    char *tokens[],
+    int n,
+    int linea,
+    const char *nombre
+)
+{
+    double v[4];
+
+    if (n != 5) {
+
+        fijar_error(
+            e, linea, nombre,
+            "corte espera cuatro coeficientes"
+        );
+
+        return 0;
+    }
+
+    for (int i = 0; i < 4; i++) {
+
+        if (!a_doble(tokens[i + 1], &v[i])) {
+
+            fijar_error(
+                e, linea, nombre,
+                "coeficiente invalido para plano de corte"
+            );
+
+            return 0;
+        }
+    }
+
+    PlanoCorte plano = {
+        v[0], v[1], v[2], v[3]
+    };
+
+    if (!escena_agregar_plano_corte(e, plano)) {
+
+        fijar_error(
+            e, linea, nombre,
+            "plano de corte invalido o sin objeto previo"
+        );
+
+        return 0;
+    }
+
+    return 1;
+}
+
 static int leer_esfera(Escena *e, char *tokens[], int n, int linea,
                        const char *nombre)
 {
@@ -1674,6 +1934,20 @@ int escena_leer_flujo(Escena *escena, FILE *flujo, const char *nombre)
 
         if (strcmp(tokens[0], "cono") == 0) {
             if (!leer_cono(escena, tokens, n, num_linea, nombre)) {
+                return 0;
+            }
+            continue;
+        }
+
+        if (strcmp(tokens[0], "cuadratica") == 0) {
+            if (!leer_cuadratica(escena, tokens, n, num_linea, nombre)) {
+                return 0;
+            }
+            continue;
+        }
+
+        if (strcmp(tokens[0], "corte") == 0) {
+            if (!leer_corte(escena, tokens, n, num_linea, nombre)) {
                 return 0;
             }
             continue;

@@ -1,7 +1,7 @@
 CC = gcc
 CFLAGS = -std=c11 -O2 -Wall -Wextra -Wpedantic
 LDLIBS = -lm
-MOTOR_OBJS = escena.o vectores.o poligonos.o discos.o elipses.o cilindros.o conos.o raytracing.o
+MOTOR_OBJS = escena.o vectores.o poligonos.o discos.o elipses.o cilindros.o conos.o cortes.o ecuaciones.o cuadraticas.o raytracing.o
 OBJS = main.o $(MOTOR_OBJS) framebuffer.o
 BIN = raytracing
 
@@ -13,13 +13,16 @@ $(BIN): $(OBJS)
 main.o: main.c escena.h framebuffer.h objetos.h
 escena.o: escena.c escena.h objetos.h vectores.h poligonos.h discos.h elipses.h
 vectores.o: vectores.c vectores.h objetos.h
-raytracing.o: raytracing.c raytracing.h escena.h vectores.h poligonos.h discos.h elipses.h cilindros.h conos.h objetos.h
+raytracing.o: raytracing.c raytracing.h escena.h vectores.h poligonos.h discos.h elipses.h cilindros.h conos.h cortes.h ecuaciones.h cuadraticas.h objetos.h
 framebuffer.o: framebuffer.c framebuffer.h raytracing.h objetos.h
 poligonos.o: poligonos.c poligonos.h vectores.h objetos.h
 discos.o: discos.c discos.h vectores.h objetos.h poligonos.h
 cilindros.o: cilindros.c cilindros.h vectores.h objetos.h poligonos.h
 conos.o: conos.c conos.h vectores.h objetos.h poligonos.h
 elipses.o: elipses.c elipses.h vectores.h objetos.h poligonos.h
+cortes.o: cortes.c cortes.h vectores.h objetos.h
+ecuaciones.o: ecuaciones.c ecuaciones.h
+cuadraticas.o: cuadraticas.c cuadraticas.h vectores.h objetos.h poligonos.h
 clean:
 	rm -f $(OBJS) $(BIN) pruebas/prueba_iluminacion pruebas/prueba_opticos
 ESCENA ?= escena.txt

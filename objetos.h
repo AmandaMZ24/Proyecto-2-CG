@@ -9,6 +9,8 @@
  */
 #ifndef OBJETOS_H
 #define OBJETOS_H
+#define MAX_PLANOS_CORTE 8
+
 
 /* ------------------------------------------------------------------ */
 /* Vectores y colores                                                  */
@@ -19,6 +21,13 @@ typedef struct {
     double y;
     double z;
 } Vec3;
+
+typedef struct {
+    double A;
+    double B;
+    double C;
+    double D;
+} PlanoCorte;
 
 typedef struct {
     double r;
@@ -94,6 +103,7 @@ typedef enum {
     TIPO_ELIPSE = 3,
     TIPO_CILINDRO = 4,
     TIPO_CONO = 5,
+    TIPO_CUADRATICA = 6
 } TipoObjeto;
 
 typedef struct {
@@ -149,6 +159,23 @@ typedef struct {
     Material material;
 } Cono;
 
+typedef struct {
+    double A;
+    double B;
+    double C;
+    double D;
+    double E;
+    double F;
+    double G;
+    double H;
+    double I;
+    double J;
+
+    Color color;
+    Material material;
+
+} Cuadratica;
+
 /*
  * Objeto "etiquetado": el campo `tipo` indica que miembro de la union es
  * valido. Nunca se accede a un miembro distinto del que indique `tipo`.
@@ -162,7 +189,11 @@ typedef struct {
         Elipse elipse;
         Cilindro cilindro;
         Cono cono;
+        Cuadratica cuadratica;
     } u;
+    PlanoCorte planos_corte[MAX_PLANOS_CORTE];
+    int num_planos_corte;
+
 } Objeto;
 
 /* ------------------------------------------------------------------ */
