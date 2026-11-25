@@ -1,7 +1,8 @@
 CC = gcc
 CFLAGS = -std=c11 -O2 -Wall -Wextra -Wpedantic
 LDLIBS = -lm
-OBJS = main.o escena.o vectores.o poligonos.o discos.o elipses.o raytracing.o framebuffer.o
+MOTOR_OBJS = escena.o vectores.o poligonos.o discos.o elipses.o cilindros.o conos.o raytracing.o
+OBJS = main.o $(MOTOR_OBJS) framebuffer.o
 BIN = raytracing
 
 # ImageMagick 7 usa "magick", ImageMagick 6 usa "convert".
@@ -12,10 +13,12 @@ $(BIN): $(OBJS)
 main.o: main.c escena.h framebuffer.h objetos.h
 escena.o: escena.c escena.h objetos.h vectores.h poligonos.h discos.h elipses.h
 vectores.o: vectores.c vectores.h objetos.h
-raytracing.o: raytracing.c raytracing.h escena.h vectores.h poligonos.h objetos.h discos.h elipses.h
+raytracing.o: raytracing.c raytracing.h escena.h vectores.h poligonos.h discos.h elipses.h cilindros.h conos.h objetos.h
 framebuffer.o: framebuffer.c framebuffer.h raytracing.h objetos.h
 poligonos.o: poligonos.c poligonos.h vectores.h objetos.h
 discos.o: discos.c discos.h vectores.h objetos.h poligonos.h
+cilindros.o: cilindros.c cilindros.h vectores.h objetos.h poligonos.h
+conos.o: conos.c conos.h vectores.h objetos.h poligonos.h
 elipses.o: elipses.c elipses.h vectores.h objetos.h poligonos.h
 clean:
 	rm -f $(OBJS) $(BIN) pruebas/prueba_iluminacion pruebas/prueba_opticos
@@ -43,18 +46,14 @@ prueba_escenas: $(BIN)
 	done
 	@echo "Imagenes en salida_pruebas/"
 
-# Prueba del modelo de iluminacion (ambiental, difusa, especular,
-# sombras y materiales). Se ejecuta desde la raiz del proyecto.
-prueba_iluminacion: escena.o vectores.o poligonos.o discos.o elipses.o raytracing.o
+prueba_iluminacion: $(MOTOR_OBJS)
 	$(CC) $(CFLAGS) -I. -o pruebas/prueba_iluminacion \
-		pruebas/prueba_iluminacion.c escena.o vectores.o poligonos.o discos.o elipses.o raytracing.o $(LDLIBS)
+		pruebas/prueba_iluminacion.c $(MOTOR_OBJS) $(LDLIBS)
 	./pruebas/prueba_iluminacion
 
-# Prueba de los efectos opticos: espejos, transparencia y su
-# interaccion con sombras e iluminacion.
-prueba_opticos: escena.o vectores.o poligonos.o discos.o elipses.o raytracing.o
+prueba_opticos: $(MOTOR_OBJS)
 	$(CC) $(CFLAGS) -I. -o pruebas/prueba_opticos \
-		pruebas/prueba_opticos.c escena.o vectores.o poligonos.o discos.o elipses.o raytracing.o $(LDLIBS)
+		pruebas/prueba_opticos.c $(MOTOR_OBJS) $(LDLIBS)
 	./pruebas/prueba_opticos
 
 prueba: prueba_iluminacion prueba_opticos

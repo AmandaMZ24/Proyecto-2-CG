@@ -8,6 +8,8 @@
 #include "poligonos.h"
 #include "discos.h"
 #include "elipses.h"
+#include "cilindros.h"
+#include "conos.h"
 /*
  * Desplazamiento del origen de los rayos de sombra, reflejados y
  * transparentes respecto a la superficie. Evita la auto-interseccion
@@ -101,6 +103,16 @@ static int intersecar_objeto(
             return intersecar_elipse(
                 origen, direccion,
                 &objeto->u.elipse, t
+            );
+        case TIPO_CILINDRO:
+            return intersecar_cilindro(
+                origen, direccion,
+                &objeto->u.cilindro, t
+            );
+        case TIPO_CONO:
+            return intersecar_cono(
+                origen, direccion,
+                &objeto->u.cono, t
             );
 
         default:
@@ -244,6 +256,24 @@ static void datos_de_impacto(
             break;
         }
 
+        case TIPO_CILINDRO: {
+            const Cilindro *cilindro = &objeto->u.cilindro;
+
+            *normal = normal_cilindro(punto, cilindro);
+            *color = cilindro->color;
+            *material = cilindro->material;
+            break;
+        }
+
+        case TIPO_CONO: {
+            const Cono *cono = &objeto->u.cono;
+
+            *normal = normal_cono(punto, cono);
+            *color = cono->color;
+            *material = cono->material;
+            break;
+        }
+
         default:
             return;
     }
@@ -282,7 +312,10 @@ static Material material_de(const Objeto *objeto)
 
         case TIPO_ELIPSE:
             return objeto->u.elipse.material;
-
+        case TIPO_CILINDRO:
+            return objeto->u.cilindro.material;
+        case TIPO_CONO:
+            return objeto->u.cono.material;
         default:
             return material;
     }

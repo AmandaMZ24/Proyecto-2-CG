@@ -238,7 +238,13 @@ static Material *material_ultimo(Escena *e)
 
         case TIPO_ELIPSE:
             return &ultimo->u.elipse.material;
-
+        
+        case TIPO_CILINDRO:
+            return &ultimo->u.cilindro.material;
+        
+        case TIPO_CONO:
+            return &ultimo->u.cono.material;
+        
         default:
             return NULL;
     }
@@ -496,6 +502,100 @@ int escena_agregar_elipse(
     nuevo->u.elipse.distancia_maxima = distancia_maxima;
     nuevo->u.elipse.color = color;
     nuevo->u.elipse.material = material;
+
+    escena->num_objetos++;
+
+    return 1;
+}
+
+int escena_agregar_cilindro(
+    Escena *escena,
+    Vec3 ancla,
+    Vec3 eje,
+    double radio,
+    double d_min,
+    double d_max,
+    Color color,
+    Material material
+)
+{
+    const double EPSILON = 1e-9;
+
+    if (escena == NULL ||
+        !material_valido(&material) ||
+        !isfinite(radio) ||
+        radio <= 0.0 ||
+        !isfinite(d_min) ||
+        !isfinite(d_max) ||
+        d_min >= d_max ||
+        vec_longitud(eje) <= EPSILON) {
+
+        return 0;
+    }
+
+    Objeto *nuevo = reservar_objeto(escena);
+
+    if (nuevo == NULL) {
+        return 0;
+    }
+
+    nuevo->tipo = TIPO_CILINDRO;
+    nuevo->u.cilindro.ancla = ancla;
+    nuevo->u.cilindro.eje = vec_normalizar(eje);
+    nuevo->u.cilindro.radio = radio;
+    nuevo->u.cilindro.d_min = d_min;
+    nuevo->u.cilindro.d_max = d_max;
+    nuevo->u.cilindro.color = color;
+    nuevo->u.cilindro.material = material;
+
+    escena->num_objetos++;
+
+    return 1;
+}
+
+int escena_agregar_cono(
+    Escena *escena,
+    Vec3 vertice,
+    Vec3 eje,
+    double m,
+    double n,
+    double d_min,
+    double d_max,
+    Color color,
+    Material material
+)
+{
+    const double EPSILON = 1e-9;
+
+    if (escena == NULL ||
+        !material_valido(&material) ||
+        !isfinite(m) ||
+        !isfinite(n) ||
+        !isfinite(d_min) ||
+        !isfinite(d_max) ||
+        m <= EPSILON ||
+        n <= EPSILON ||
+        d_min >= d_max ||
+        vec_longitud(eje) <= EPSILON) {
+
+        return 0;
+    }
+
+    Objeto *nuevo = reservar_objeto(escena);
+
+    if (nuevo == NULL) {
+        return 0;
+    }
+
+    nuevo->tipo = TIPO_CONO;
+    nuevo->u.cono.vertice = vertice;
+    nuevo->u.cono.eje = vec_normalizar(eje);
+    nuevo->u.cono.m = m;
+    nuevo->u.cono.n = n;
+    nuevo->u.cono.d_min = d_min;
+    nuevo->u.cono.d_max = d_max;
+    nuevo->u.cono.color = color;
+    nuevo->u.cono.material = material;
 
     escena->num_objetos++;
 
@@ -887,6 +987,169 @@ static int leer_elipse(
         fijar_error(
             e, linea, nombre,
             "no se pudo agregar la elipse"
+        );
+
+        return 0;
+    }
+
+    return 1;
+}
+
+static int leer_cilindro(
+    Escena *e,
+    char *tokens[],
+    int n,
+    int linea,
+    const char *nombre
+)
+{
+    double v[12];
+    Material material;
+
+    if (n != 13 && n != 17) {
+        fijar_error(
+            e, linea, nombre,
+            "cantidad incorrecta de argumentos para cilindro"
+        );
+
+        return 0;
+    }
+
+    for (int i = 0; i < 12; i++) {
+
+        if (!a_doble(tokens[i + 1], &v[i])) {
+
+            fijar_error(
+                e, linea, nombre,
+                "parametro numerico invalido para cilindro"
+            );
+
+            return 0;
+        }
+    }
+
+    Vec3 ancla = {v[0], v[1], v[2]};
+    Vec3 eje = {v[3], v[4], v[5]};
+
+    double radio = v[6];
+    double d_min = v[7];
+    double d_max = v[8];
+
+    Color color = {v[9], v[10], v[11]};
+
+    if (color.r < 0.0 || color.r > 1.0 ||
+        color.g < 0.0 || color.g > 1.0 ||
+        color.b < 0.0 || color.b > 1.0) {
+
+        fijar_error(
+            e, linea, nombre,
+            "color del cilindro fuera de rango"
+        );
+
+        return 0;
+    }
+
+    material_defecto(&material);
+
+    if (n == 17 &&
+        !a_material(
+            e, tokens, 13, linea,
+            nombre, "cilindro", &material)) {
+
+        return 0;
+    }
+
+    if (!escena_agregar_cilindro(
+            e, ancla, eje,
+            radio, d_min, d_max,
+            color, material)) {
+
+        fijar_error(
+            e, linea, nombre,
+            "no se pudo agregar el cilindro"
+        );
+
+        return 0;
+    }
+
+    return 1;
+}
+
+static int leer_cono(
+    Escena *e,
+    char *tokens[],
+    int n,
+    int linea,
+    const char *nombre
+)
+{
+    double v[13];
+    Material material;
+
+    if (n != 14 && n != 18) {
+
+        fijar_error(
+            e, linea, nombre,
+            "cantidad incorrecta de argumentos para cono"
+        );
+
+        return 0;
+    }
+
+    for (int i = 0; i < 13; i++) {
+
+        if (!a_doble(tokens[i + 1], &v[i])) {
+
+            fijar_error(
+                e, linea, nombre,
+                "parametro numerico invalido para cono"
+            );
+
+            return 0;
+        }
+    }
+
+    Vec3 vertice = {v[0], v[1], v[2]};
+    Vec3 eje = {v[3], v[4], v[5]};
+
+    double m = v[6];
+    double razon_n = v[7];
+
+    double d_min = v[8];
+    double d_max = v[9];
+
+    Color color = {v[10], v[11], v[12]};
+
+    if (color.r < 0.0 || color.r > 1.0 ||
+        color.g < 0.0 || color.g > 1.0 ||
+        color.b < 0.0 || color.b > 1.0) {
+
+        fijar_error(
+            e, linea, nombre,
+            "color del cono fuera de rango"
+        );
+
+        return 0;
+    }
+
+    material_defecto(&material);
+
+    if (n == 18 &&
+        !a_material(
+            e, tokens, 14, linea,
+            nombre, "cono", &material)) {
+
+        return 0;
+    }
+
+    if (!escena_agregar_cono(
+            e, vertice, eje,
+            m, razon_n, d_min, d_max,
+            color, material)) {
+
+        fijar_error(
+            e, linea, nombre,
+            "no se pudo agregar el cono"
         );
 
         return 0;
@@ -1400,6 +1663,20 @@ int escena_leer_flujo(Escena *escena, FILE *flujo, const char *nombre)
                 return 0;
             }
         continue;
+        }
+
+        if (strcmp(tokens[0], "cilindro") == 0) {
+            if (!leer_cilindro(escena, tokens, n, num_linea, nombre)) {
+                return 0;
+            }
+            continue;
+        }
+
+        if (strcmp(tokens[0], "cono") == 0) {
+            if (!leer_cono(escena, tokens, n, num_linea, nombre)) {
+                return 0;
+            }
+            continue;
         }
 
         /* Leer una fuente de luz */

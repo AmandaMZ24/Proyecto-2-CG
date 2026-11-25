@@ -1,0 +1,62 @@
+# Prueba de cilindros y conos
+
+resolucion 1300 760
+ojo 0 0 -10
+ventana -6.5 -3.8 6.5 3.8
+fondo 0.08 0.08 0.12
+ambiente 0.5
+
+luz -5 5 -5 1.0
+luz 5 3 -4 0.7
+
+# CILINDROS
+
+# Cilindro rojo vertical
+cilindro -5 0.5 5 0 1 0 1.1 0 3.5 0.9 0.1 0.1
+
+# Tapas del cilindro rojo
+disco -5 0.5 5 0 -1 0 1.1 0.9 0.1 0.1
+disco -5 4 5 0 1 0 1.1 0.9 0.1 0.1
+
+# Cilindro azul horizontal
+cilindro -1.8 2 5 1 0 0 0.9 0 3.6 0.1 0.4 0.9
+
+# Tapas del cilindro azul
+disco -1.8 2 5 -1 0 0 0.9 0.1 0.4 0.9
+disco 1.8 2 5 1 0 0 0.9 0.1 0.4 0.9
+
+# Cilindro verde inclinado
+cilindro 4 0.5 5 0.6 0.8 0 1 0 3.5 0.1 0.9 0.3
+
+# CONOS
+
+# Cono amarillo
+cono -5 0 5 0 -1 0 2 1 0 4 0.9 0.8 0.1
+
+# Base del cono amarillo
+disco -5 -4 5 0 -1 0 2 0.9 0.8 0.1
+
+# Cono morado horizontal
+cono -2 -2.5 5 1 0 0 3 1 0 4 0.7 0.2 0.9
+
+# Base del cono morado
+disco 2 -2.5 5 1 0 0 1.333333333 0.7 0.2 0.9
+
+# Cono naranja truncado
+cono 5 0 5 0 -1 0 2 1 1 4 1.0 0.5 0.1
+
+# Tapas del cono truncado
+disco 5 -1 5 0 1 0 0.5 1.0 0.5 0.1
+disco 5 -4 5 0 -1 0 2 1.0 0.5 0.1
+
+# Ocho esferas requeridas por el lector actual
+esfera -7 9 10 0.3 1 1 1
+esfera -5 9 10 0.3 1 1 1
+esfera -3 9 10 0.3 1 1 1
+esfera -1 9 10 0.3 1 1 1
+esfera 1 9 10 0.3 1 1 1
+esfera 3 9 10 0.3 1 1 1
+esfera 5 9 10 0.3 1 1 1
+esfera 7 9 10 0.3 1 1 1
+
+fin

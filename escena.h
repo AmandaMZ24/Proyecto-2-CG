@@ -131,4 +131,8 @@ int escena_agregar_disco(Escena *escena, Vec3 centro, Vec3 normal, double radio,
 
 int escena_agregar_elipse( Escena *escena, Vec3 foco1, Vec3 foco2, Vec3 normal, double distancia_maxima, Color color, Material material);
 
+int escena_agregar_cilindro(Escena *escena, Vec3 ancla, Vec3 eje, double radio, double d_min, double d_max, Color color, Material material);
+
+int escena_agregar_cono(Escena *escena, Vec3 vertice, Vec3 eje, double m, double n, double d_min, double d_max, Color color, Material material);
+
 #endif /* ESCENA_H */
