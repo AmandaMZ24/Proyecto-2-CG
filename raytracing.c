@@ -13,6 +13,8 @@
 #include "cuadraticas.h"
 #include "cortes.h"
 #include "ecuaciones.h"
+#include "texturas.h"
+#include "antialiasing.h"
 /*
  * Desplazamiento del origen de los rayos de sombra, reflejados y
  * transparentes respecto a la superficie. Evita la auto-interseccion
@@ -821,6 +823,9 @@ static Color color_recursivo(const Escena *escena, Vec3 origen,
     material_defecto(&material);
 
     datos_de_impacto(objeto, punto, direccion, &normal, &base, &material);
+    /* Obtener color de la textura si corresponde */
+    base = color_superficie(escena, objeto, punto, base);
+
 
     if (vec_longitud(normal) <= 0.0) {
         return negro;
@@ -892,27 +897,62 @@ Color De_Que_Color(const Escena *escena, Vec3 origen, Vec3 direccion)
 /*  TRAZAR_PIXEL                                                       */
 /* ================================================================== */
 
-Color trazar_pixel(const Escena *escena, int columna, int fila)
+Color trazar_muestra(
+    const Escena *escena,
+    double columna,
+    double fila
+)
 {
-    Color negro = {0.0, 0.0, 0.0};
+    double ancho_ventana =
+        escena->ventana_xmax -
+        escena->ventana_xmin;
 
-    if (!escena || escena->ancho <= 0 || escena->alto <= 0 ||
-        columna < 0 || columna >= escena->ancho ||
-        fila < 0 || fila >= escena->alto) {
-        return negro;
+    double alto_ventana =
+        escena->ventana_ymax -
+        escena->ventana_ymin;
+
+    double x =
+        escena->ventana_xmin +
+        (columna / escena->ancho) *
+        ancho_ventana;
+
+    double y =
+        escena->ventana_ymax -
+        (fila / escena->alto) *
+        alto_ventana;
+
+    Vec3 punto = {x, y, 0.0};
+
+    Vec3 direccion = vec_normalizar(
+        vec_restar(punto, escena->ojo)
+    );
+
+    return De_Que_Color(
+        escena,
+        escena->ojo,
+        direccion
+    );
+}
+
+Color trazar_pixel(
+    const Escena *escena,
+    int columna,
+    int fila
+)
+{
+    if (escena->antialiasing) {
+
+        return antialiasing_pixel(
+            escena,
+            columna,
+            fila
+        );
     }
 
-    /* El centro del pixel se proyecta en el plano de imagen z = 0 */
-    double x = escena->ventana_xmin +
-        ((double)columna + 0.5) / escena->ancho *
-        (escena->ventana_xmax - escena->ventana_xmin);
-
-    double y = escena->ventana_ymax -
-        ((double)fila + 0.5) / escena->alto *
-        (escena->ventana_ymax - escena->ventana_ymin);
-
-    Vec3 punto_ventana = {x, y, 0.0};
-    Vec3 direccion = vec_restar(punto_ventana, escena->ojo);
-
-    return De_Que_Color(escena, escena->ojo, direccion);
+    /* Una muestra en el centro del pixel */
+    return trazar_muestra(
+        escena,
+        columna + 0.5,
+        fila + 0.5
+    );
 }

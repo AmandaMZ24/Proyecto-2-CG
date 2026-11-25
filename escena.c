@@ -8,6 +8,7 @@
 #include "escena.h"
 #include "poligonos.h"
 #include "vectores.h"
+#include "texturas.h"
 
 #include <ctype.h>
 #include <errno.h>
@@ -59,6 +60,12 @@ void escena_inicializar(Escena *escena)
     if (escena->objetos == NULL) {
         escena->cap_objetos = 0;
     }
+
+    escena->texturas = NULL;
+    escena->num_texturas = 0;
+    escena->cap_texturas = 0;
+
+    escena->antialiasing = 1;
 
     escena->cap_luces = 4;
     escena->num_luces = 0;
@@ -309,6 +316,9 @@ int escena_agregar_esfera(Escena *escena, Vec3 centro, double radio,
 
     nuevo = &escena->objetos[escena->num_objetos];
     nuevo->tipo       = TIPO_ESFERA;
+    nuevo->textura = 0;
+    nuevo->textura_g = (Vec3){1.0, 0.0, 0.0};
+    nuevo->textura_norte = (Vec3){0.0, 1.0, 0.0};
     nuevo->num_planos_corte = 0;
     nuevo->u.esfera.centro = centro;
     nuevo->u.esfera.radio  = radio;
@@ -407,6 +417,9 @@ int escena_agregar_poligono(
     /*Agregar el nuevo objeto*/
     Objeto *nuevo = &escena->objetos[escena->num_objetos];
     nuevo->tipo = TIPO_POLIGONO;
+    nuevo->textura = 0;
+    nuevo->textura_g = (Vec3){1.0, 0.0, 0.0};
+    nuevo->textura_norte = (Vec3){0.0, 1.0, 0.0};
     nuevo->num_planos_corte = 0;
     nuevo->u.poligono.vertices = copia;
     nuevo->u.poligono.num_vertices = num_vertices;
@@ -446,6 +459,9 @@ int escena_agregar_disco(
     }
 
     nuevo->tipo = TIPO_DISCO;
+    nuevo->textura = 0;
+    nuevo->textura_g = (Vec3){1.0, 0.0, 0.0};
+    nuevo->textura_norte = (Vec3){0.0, 1.0, 0.0};
     nuevo->num_planos_corte = 0;
     nuevo->u.disco.centro = centro;
     nuevo->u.disco.normal = vec_normalizar(normal);
@@ -502,6 +518,9 @@ int escena_agregar_elipse(
     }
 
     nuevo->tipo = TIPO_ELIPSE;
+    nuevo->textura = 0;
+    nuevo->textura_g = (Vec3){1.0, 0.0, 0.0};
+    nuevo->textura_norte = (Vec3){0.0, 1.0, 0.0};
     nuevo->num_planos_corte = 0;
     nuevo->u.elipse.foco1 = foco1;
     nuevo->u.elipse.foco2 = foco2;
@@ -547,6 +566,9 @@ int escena_agregar_cilindro(
     }
 
     nuevo->tipo = TIPO_CILINDRO;
+    nuevo->textura = 0;
+    nuevo->textura_g = (Vec3){1.0, 0.0, 0.0};
+    nuevo->textura_norte = (Vec3){0.0, 1.0, 0.0};
     nuevo->num_planos_corte = 0;
     nuevo->u.cilindro.ancla = ancla;
     nuevo->u.cilindro.eje = vec_normalizar(eje);
@@ -596,6 +618,9 @@ int escena_agregar_cono(
     }
 
     nuevo->tipo = TIPO_CONO;
+    nuevo->textura = 0;
+    nuevo->textura_g = (Vec3){1.0, 0.0, 0.0};
+    nuevo->textura_norte = (Vec3){0.0, 1.0, 0.0};
     nuevo->num_planos_corte = 0;
     nuevo->u.cono.vertice = vertice;
     nuevo->u.cono.eje = vec_normalizar(eje);
@@ -662,6 +687,9 @@ int escena_agregar_cuadratica(
     *nuevo = (Objeto){0};
 
     nuevo->tipo = TIPO_CUADRATICA;
+    nuevo->textura = 0;
+    nuevo->textura_g = (Vec3){1.0, 0.0, 0.0};
+    nuevo->textura_norte = (Vec3){0.0, 1.0, 0.0};
     nuevo->u.cuadratica = superficie;
 
     escena->num_objetos++;
@@ -722,6 +750,125 @@ int escena_agregar_plano_corte(
     ] = plano;
 
     ultimo->num_planos_corte++;
+
+    return 1;
+}
+
+int escena_cargar_textura(
+    Escena *escena,
+    const char *ruta
+)
+{
+    if (escena == NULL || ruta == NULL) {
+        return 0;
+    }
+
+    Textura nueva = {0};
+
+    /* Cargar la imagen AVS */
+    if (!cargar_textura_avs(ruta, &nueva)) {
+        return 0;
+    }
+
+    /* Ampliar el arreglo si es necesario */
+    if (escena->num_texturas >= escena->cap_texturas) {
+
+        int nueva_cap =
+            escena->cap_texturas > 0
+            ? escena->cap_texturas * 2
+            : 8;
+
+        Textura *crecido = realloc(
+            escena->texturas,
+            (size_t)nueva_cap * sizeof(Textura)
+        );
+
+        if (crecido == NULL) {
+
+            liberar_textura(&nueva);
+
+            return 0;
+        }
+
+        escena->texturas = crecido;
+        escena->cap_texturas = nueva_cap;
+    }
+
+    /* Guardar la textura */
+    escena->texturas[
+        escena->num_texturas
+    ] = nueva;
+
+    escena->num_texturas++;
+
+    return 1;
+}
+
+int escena_aplicar_textura(
+    Escena *escena,
+    int indice
+)
+{
+    if (escena == NULL ||
+        escena->objetos == NULL ||
+        escena->num_objetos <= 0 ||
+        indice < 0 ||
+        indice > escena->num_texturas) {
+
+        return 0;
+    }
+
+    Objeto *ultimo =
+        &escena->objetos[escena->num_objetos - 1];
+
+    /* Solo admitir las primitivas con mapeo UV */
+    if (indice != 0 &&
+        ultimo->tipo != TIPO_POLIGONO &&
+        ultimo->tipo != TIPO_CILINDRO &&
+        ultimo->tipo != TIPO_ESFERA) {
+
+        return 0;
+    }
+
+    ultimo->textura = indice;
+
+    return 1;
+}
+
+int escena_orientar_textura(
+    Escena *escena,
+    Vec3 G,
+    Vec3 norte
+)
+{
+    const double EPSILON = 1e-9;
+
+    if (escena == NULL ||
+        escena->objetos == NULL ||
+        escena->num_objetos <= 0) {
+
+        return 0;
+    }
+
+    if (vec_longitud(G) <= EPSILON ||
+        vec_longitud(norte) <= EPSILON) {
+
+        return 0;
+    }
+
+    Objeto *ultimo =
+        &escena->objetos[escena->num_objetos - 1];
+
+    if (ultimo->tipo != TIPO_ESFERA &&
+        ultimo->tipo != TIPO_CILINDRO) {
+
+        return 0;
+    }
+
+    ultimo->textura_g = vec_normalizar(G);
+
+    ultimo->textura_norte =
+        vec_normalizar(norte);
 
     return 1;
 }
@@ -1418,6 +1565,141 @@ static int leer_corte(
     return 1;
 }
 
+static int leer_textura_cargar(
+    Escena *e,
+    char *tokens[],
+    int n,
+    int linea,
+    const char *nombre
+)
+{
+    if (n != 2) {
+
+        fijar_error(
+            e, linea, nombre,
+            "textura_cargar espera una ruta AVS"
+        );
+
+        return 0;
+    }
+
+    if (!escena_cargar_textura(
+            e, tokens[1])) {
+
+        fijar_error(
+            e, linea, nombre,
+            "no se pudo cargar el archivo de textura"
+        );
+
+        return 0;
+    }
+
+    return 1;
+}
+
+static int leer_textura(
+    Escena *e,
+    char *tokens[],
+    int n,
+    int linea,
+    const char *nombre
+)
+{
+    double valor;
+
+    if (n != 2 ||
+        !a_doble(tokens[1], &valor)) {
+
+        fijar_error(
+            e, linea, nombre,
+            "textura espera un indice entero"
+        );
+
+        return 0;
+    }
+
+    if (!isfinite(valor) ||
+        valor < 0.0 ||
+        valor > e->num_texturas ||
+        floor(valor) != valor) {
+
+        fijar_error(
+            e, linea, nombre,
+            "indice de textura invalido"
+        );
+
+        return 0;
+    }
+
+    if (!escena_aplicar_textura(
+            e, (int)valor)) {
+
+        fijar_error(
+            e, linea, nombre,
+            "no se pudo aplicar la textura al objeto"
+        );
+
+        return 0;
+    }
+
+    return 1;
+}
+
+static int leer_textura_orientacion(
+    Escena *e,
+    char *tokens[],
+    int n,
+    int linea,
+    const char *nombre
+)
+{
+    double v[6];
+
+    if (n != 7) {
+
+        fijar_error(
+            e, linea, nombre,
+            "textura_orientacion espera seis valores"
+        );
+
+        return 0;
+    }
+
+    for (int i = 0; i < 6; i++) {
+
+        if (!a_doble(tokens[i + 1], &v[i])) {
+
+            fijar_error(
+                e, linea, nombre,
+                "orientacion de textura invalida"
+            );
+
+            return 0;
+        }
+    }
+
+    Vec3 G = {
+        v[0], v[1], v[2]
+    };
+
+    Vec3 norte = {
+        v[3], v[4], v[5]
+    };
+
+    if (!escena_orientar_textura(
+            e, G, norte)) {
+
+        fijar_error(
+            e, linea, nombre,
+            "no se pudo orientar la textura"
+        );
+
+        return 0;
+    }
+
+    return 1;
+}
+
 static int leer_esfera(Escena *e, char *tokens[], int n, int linea,
                        const char *nombre)
 {
@@ -1953,6 +2235,38 @@ int escena_leer_flujo(Escena *escena, FILE *flujo, const char *nombre)
             continue;
         }
 
+        if (strcmp(tokens[0], "textura_cargar") == 0) {
+            if (!leer_textura_cargar(escena, tokens, n, num_linea, nombre)) {
+                return 0;
+            }
+            continue;
+        }
+
+        if (strcmp(tokens[0], "textura") == 0) {
+            if (!leer_textura(escena, tokens, n, num_linea, nombre)) {
+                return 0;
+            }
+            continue;
+        }
+
+        if (strcmp(tokens[0], "textura_orientacion") == 0) {
+            if (!leer_textura_orientacion(escena, tokens, n, num_linea, nombre)) {
+                return 0;
+            }
+            continue;
+        }
+
+        if (strcmp(tokens[0], "antialiasing") == 0) {
+            if(n != 2 || (strcmp(tokens[1], "0") != 0 && strcmp(tokens[1], "1") != 0)) {
+                fijar_error(escena, num_linea, nombre,
+                            "\"antialiasing\" espera un argumento 0 o 1");
+                return 0;
+            }
+            escena->antialiasing = strcmp(tokens[1], "1") == 0;
+
+            continue;
+        }
+        
         /* Leer una fuente de luz */
         if (strcmp(tokens[0], "luz") == 0)
         {
@@ -2099,4 +2413,21 @@ void escena_liberar(Escena *escena)
     escena->luces = NULL;
     escena->num_luces = 0;
     escena->cap_luces = 0;
+
+     /* Liberar los pixeles de cada textura */
+    if (escena->texturas != NULL)
+    {
+        for (int i = 0; i < escena->num_texturas; i++)
+        {
+            liberar_textura(&escena->texturas[i]);
+        }
+
+        /* Liberar el arreglo de texturas */
+        free(escena->texturas);
+    }
+
+    escena->texturas = NULL;
+    escena->num_texturas = 0;
+    escena->cap_texturas = 0;
+    escena->antialiasing = 1;
 }

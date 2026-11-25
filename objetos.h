@@ -36,6 +36,12 @@ typedef struct {
 } Color;
 
 typedef struct {
+    int ancho;
+    int alto;
+    unsigned char *pixeles;
+} Textura;
+
+typedef struct {
     Vec3 posicion;
     double intensidad;
 } Luz;
@@ -193,6 +199,9 @@ typedef struct {
     } u;
     PlanoCorte planos_corte[MAX_PLANOS_CORTE];
     int num_planos_corte;
+    int textura;
+    Vec3 textura_g;
+    Vec3 textura_norte;
 
 } Objeto;
 
@@ -232,6 +241,12 @@ typedef struct {
     Luz *luces;
     int num_luces;
     int cap_luces;
+
+    Textura *texturas;
+    int num_texturas;
+    int cap_texturas;
+    
+    int antialiasing; /* 0 = desactivado, 1 = activado */
 
     char error[256];      /* descripcion del ultimo error de lectura */
 } Escena;
