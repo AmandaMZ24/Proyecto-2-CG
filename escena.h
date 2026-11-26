@@ -138,4 +138,10 @@ int escena_agregar_cono(Escena *escena, Vec3 vertice, Vec3 eje, double m, double
 int escena_agregar_cuadratica(Escena *escena, Cuadratica superficie);
 
 int escena_agregar_plano_corte(Escena *escena, PlanoCorte plano);
+
+int escena_cargar_textura(Escena *escena, const char *ruta);
+
+int escena_aplicar_textura(Escena *escena, int indice);
+
+int escena_orientar_textura(Escena *escena, Vec3 g, Vec3 norte);
 #endif /* ESCENA_H */

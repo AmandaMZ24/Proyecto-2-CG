@@ -15,3 +15,5 @@ imagen.jpg
 *~
 # Conservar codigo fuente de pruebas
 !pruebas/*.c
+/sin_aa.png
+/con_aa.png
