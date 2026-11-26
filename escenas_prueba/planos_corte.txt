@@ -1,0 +1,44 @@
+# Prueba de planos de corte
+
+resolucion 1300 760
+ojo 0 0 -10
+ventana -6.5 -3.8 6.5 3.8
+fondo 0.08 0.08 0.12
+ambiente 0.5
+
+luz -5 5 -5 1.0
+luz 5 3 -4 0.7
+
+# Esfera roja: corte vertical
+esfera -5 2 5 1.8 0.9 0.1 0.1
+corte 1 0 0 5
+
+# Esfera azul: corte diagonal
+esfera 0 2 5 1.8 0.1 0.4 0.9
+corte 1 1 0 -2
+
+# Esfera verde: dos planos
+esfera 5 2 5 1.8 0.1 0.9 0.3
+corte 1 0 0 -5
+corte 0 1 0 -2
+
+# Cilindro amarillo con corte diagonal
+cilindro -5 -4 5 0 1 0 1.5 0 4 0.9 0.8 0.1
+corte 1 1 0 7
+
+# Cono morado con corte vertical
+cono 0 0 5 0 -1 0 2 1 0 4 0.7 0.2 0.9
+corte 1 0 0 0
+
+# Disco naranja recortado
+disco 5 -2 5 0 0 -1 1.8 1.0 0.5 0.1
+corte 0 1 0 2
+
+# Esferas adicionales requeridas por el lector
+esfera -7 9 10 0.3 1 1 1
+esfera -5 9 10 0.3 1 1 1
+esfera -3 9 10 0.3 1 1 1
+esfera -1 9 10 0.3 1 1 1
+esfera 1 9 10 0.3 1 1 1
+
+fin

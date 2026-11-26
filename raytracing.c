@@ -6,7 +6,15 @@
 #include "escena.h"
 #include "vectores.h"
 #include "poligonos.h"
-
+#include "discos.h"
+#include "elipses.h"
+#include "cilindros.h"
+#include "conos.h"
+#include "cuadraticas.h"
+#include "cortes.h"
+#include "ecuaciones.h"
+#include "texturas.h"
+#include "antialiasing.h"
 /*
  * Desplazamiento del origen de los rayos de sombra, reflejados y
  * transparentes respecto a la superficie. Evita la auto-interseccion
@@ -61,23 +69,311 @@ int intersecar_esfera(Vec3 origen, Vec3 direccion, const Esfera *esfera, double 
     return 0;
 }
 
+static int candidatos_con_cortes(
+    const Objeto *objeto,
+    Vec3 origen,
+    Vec3 direccion,
+    double soluciones[2]
+)
+{
+    switch (objeto->tipo) {
+
+        case TIPO_ESFERA: {
+
+            const Esfera *s = &objeto->u.esfera;
+
+            Vec3 W = vec_restar(
+                origen, s->centro
+            );
+
+            double A = vec_punto(
+                direccion, direccion
+            );
+
+            double B = 2.0 * vec_punto(
+                W, direccion
+            );
+
+            double C = vec_punto(W, W)
+                     - s->radio * s->radio;
+
+            return resolver_cuadratica(
+                A, B, C, soluciones
+            );
+        }
+
+        case TIPO_CILINDRO: {
+
+            const Cilindro *c = &objeto->u.cilindro;
+
+            Vec3 Q = vec_normalizar(c->eje);
+
+            Vec3 W = vec_restar(
+                origen, c->ancla
+            );
+
+            Vec3 D_perp = vec_restar(
+                direccion,
+                vec_escalar(
+                    Q, vec_punto(direccion, Q)
+                )
+            );
+
+            Vec3 W_perp = vec_restar(
+                W,
+                vec_escalar(
+                    Q, vec_punto(W, Q)
+                )
+            );
+
+            double A = vec_punto(D_perp, D_perp);
+
+            double B = 2.0 * vec_punto(
+                D_perp, W_perp
+            );
+
+            double C = vec_punto(W_perp, W_perp)
+                     - c->radio * c->radio;
+
+            return resolver_cuadratica(
+                A, B, C, soluciones
+            );
+        }
+
+        case TIPO_CONO: {
+
+            const Cono *c = &objeto->u.cono;
+
+            Vec3 Q = vec_normalizar(c->eje);
+
+            Vec3 W = vec_restar(
+                origen, c->vertice
+            );
+
+            double k = c->n / c->m;
+            double factor = 1.0 + k * k;
+
+            double DQ = vec_punto(direccion, Q);
+            double WQ = vec_punto(W, Q);
+
+            double A =
+                vec_punto(direccion, direccion)
+                - factor * DQ * DQ;
+
+            double B = 2.0 * (
+                vec_punto(W, direccion)
+                - factor * WQ * DQ
+            );
+
+            double C = vec_punto(W, W)
+                     - factor * WQ * WQ;
+
+            return resolver_cuadratica(
+                A, B, C, soluciones
+            );
+        }
+
+        case TIPO_CUADRATICA:
+
+            return intersecciones_cuadratica(
+                origen,
+                direccion,
+                &objeto->u.cuadratica,
+                soluciones
+            );
+
+        case TIPO_POLIGONO:
+
+            return intersecar_poligono(
+                origen,
+                direccion,
+                &objeto->u.poligono,
+                &soluciones[0]
+            );
+
+        case TIPO_DISCO:
+
+            return intersecar_disco(
+                origen,
+                direccion,
+                &objeto->u.disco,
+                &soluciones[0]
+            );
+
+        case TIPO_ELIPSE:
+
+            return intersecar_elipse(
+                origen,
+                direccion,
+                &objeto->u.elipse,
+                &soluciones[0]
+            );
+
+        default:
+            return 0;
+    }
+}
+
+static int punto_en_limites(
+    const Objeto *objeto,
+    Vec3 punto
+)
+{
+    const double EPSILON = 1e-9;
+
+    if (objeto->tipo == TIPO_CILINDRO) {
+
+        const Cilindro *c = &objeto->u.cilindro;
+
+        Vec3 Q = vec_normalizar(c->eje);
+
+        double d = vec_punto(
+            vec_restar(punto, c->ancla),
+            Q
+        );
+
+        return d >= c->d_min - EPSILON &&
+               d <= c->d_max + EPSILON;
+    }
+
+    if (objeto->tipo == TIPO_CONO) {
+
+        const Cono *c = &objeto->u.cono;
+
+        Vec3 Q = vec_normalizar(c->eje);
+
+        double d = vec_punto(
+            vec_restar(punto, c->vertice),
+            Q
+        );
+
+        return d >= c->d_min - EPSILON &&
+               d <= c->d_max + EPSILON &&
+               fabs(d) > EPSILON;
+    }
+
+    if (objeto->tipo == TIPO_CUADRATICA) {
+
+        Vec3 normal = normal_cuadratica(
+            punto,
+            &objeto->u.cuadratica
+        );
+
+        return vec_longitud(normal) > EPSILON;
+    }
+
+    return 1;
+}
+
 /*
  * Interseccion de un rayo con un objeto cualquiera de la escena.
  * Devuelve 1 si hay impacto hacia adelante y escribe t.
  */
-static int intersecar_objeto(const Objeto *objeto, Vec3 origen,
-                             Vec3 direccion, double *t)
+static int intersecar_objeto(
+    const Objeto *objeto,
+    Vec3 origen,
+    Vec3 direccion,
+    double *t
+)
 {
+    const double EPSILON = 1e-9;
+
     if (objeto == NULL || t == NULL) {
         return 0;
     }
 
-    if (objeto->tipo == TIPO_ESFERA) {
-        return intersecar_esfera(origen, direccion, &objeto->u.esfera, t);
+    /*
+     * Si no existen cortes, conservar los
+     * algoritmos originales.
+     */
+    if (objeto->num_planos_corte == 0 &&
+        objeto->tipo != TIPO_CUADRATICA) {
+
+        switch (objeto->tipo) {
+
+            case TIPO_ESFERA:
+                return intersecar_esfera(
+                    origen, direccion,
+                    &objeto->u.esfera, t
+                );
+
+            case TIPO_POLIGONO:
+                return intersecar_poligono(
+                    origen, direccion,
+                    &objeto->u.poligono, t
+                );
+
+            case TIPO_DISCO:
+                return intersecar_disco(
+                    origen, direccion,
+                    &objeto->u.disco, t
+                );
+
+            case TIPO_ELIPSE:
+                return intersecar_elipse(
+                    origen, direccion,
+                    &objeto->u.elipse, t
+                );
+
+            case TIPO_CILINDRO:
+                return intersecar_cilindro(
+                    origen, direccion,
+                    &objeto->u.cilindro, t
+                );
+
+            case TIPO_CONO:
+                return intersecar_cono(
+                    origen, direccion,
+                    &objeto->u.cono, t
+                );
+
+            default:
+                return 0;
+        }
     }
 
-    if (objeto->tipo == TIPO_POLIGONO) {
-        return intersecar_poligono(origen, direccion, &objeto->u.poligono, t);
+    /*
+     * Obtener todas las intersecciones
+     * cuando existen cortes o cuadraticas.
+     */
+    double soluciones[2];
+
+    int cantidad = candidatos_con_cortes(
+        objeto,
+        origen,
+        direccion,
+        soluciones
+    );
+
+    for (int i = 0; i < cantidad; i++) {
+
+        double candidato = soluciones[i];
+
+        if (!isfinite(candidato) ||
+            candidato <= EPSILON) {
+
+            continue;
+        }
+
+        Vec3 punto = punto_en_rayo(
+            origen,
+            direccion,
+            candidato
+        );
+
+        /* Validar los limites de la figura */
+        if (!punto_en_limites(objeto, punto)) {
+            continue;
+        }
+
+        /* Validar todos los planos de corte */
+        if (!punto_valido_cortes(punto, objeto)) {
+            continue;
+        }
+
+        *t = candidato;
+
+        return 1;
     }
 
     return 0;
@@ -151,50 +447,107 @@ int First_Intersection(const Escena *escena, Vec3 origen, Vec3 direccion,
  * Obtiene la normal, el color base y el material del objeto golpeado.
  * La normal siempre queda orientada hacia el lado del que llega el rayo.
  */
-static void datos_de_impacto(const Objeto *objeto, Vec3 punto, Vec3 direccion,
-                             Vec3 *normal, Color *color, Material *material)
+static void datos_de_impacto(
+    const Objeto *objeto,
+    Vec3 punto,
+    Vec3 direccion,
+    Vec3 *normal,
+    Color *color,
+    Material *material
+)
 {
     *normal = (Vec3){0.0, 0.0, 0.0};
-    *color  = (Color){0.0, 0.0, 0.0};
+    *color = (Color){0.0, 0.0, 0.0};
+
     material_defecto(material);
 
     if (objeto == NULL) {
         return;
     }
 
-    if (objeto->tipo == TIPO_ESFERA)
-    {
-        const Esfera *esfera = &objeto->u.esfera;
+    switch (objeto->tipo) {
 
-        /* Vector desde el centro hasta el punto de impacto */
-        *normal = vec_normalizar(vec_restar(punto, esfera->centro));
-        *color  = esfera->color;
-        *material = esfera->material;
-    }
-    else if (objeto->tipo == TIPO_POLIGONO)
-    {
-        const Poligono *poligono = &objeto->u.poligono;
+        case TIPO_ESFERA: {
+            const Esfera *esfera = &objeto->u.esfera;
 
-        /* Normal calculada al cargar el poligono */
-        *normal = poligono->normal;
-        *color  = poligono->color;
-        *material = poligono->material;
+            *normal = vec_normalizar(
+                vec_restar(punto, esfera->centro)
+            );
 
-        if (vec_longitud(*normal) <= 1e-12) {
-            Vec3 n = {0.0, 0.0, 0.0};
-            if (calcular_normal_poligono(poligono, &n)) {
-                *normal = n;
-            }
+            *color = esfera->color;
+            *material = esfera->material;
+            break;
         }
+
+        case TIPO_POLIGONO: {
+            const Poligono *poligono = &objeto->u.poligono;
+
+            *normal = poligono->normal;
+            *color = poligono->color;
+            *material = poligono->material;
+
+            if (vec_longitud(*normal) <= 1e-12) {
+                Vec3 n = {0.0, 0.0, 0.0};
+
+                if (calcular_normal_poligono(poligono, &n)) {
+                    *normal = n;
+                }
+            }
+
+            break;
+        }
+
+        case TIPO_DISCO: {
+            const Disco *disco = &objeto->u.disco;
+
+            *normal = vec_normalizar(disco->normal);
+            *color = disco->color;
+            *material = disco->material;
+            break;
+        }
+
+        case TIPO_ELIPSE: {
+            const Elipse *elipse = &objeto->u.elipse;
+
+            *normal = vec_normalizar(elipse->normal);
+            *color = elipse->color;
+            *material = elipse->material;
+            break;
+        }
+
+        case TIPO_CILINDRO: {
+            const Cilindro *cilindro = &objeto->u.cilindro;
+
+            *normal = normal_cilindro(punto, cilindro);
+            *color = cilindro->color;
+            *material = cilindro->material;
+            break;
+        }
+
+        case TIPO_CONO: {
+            const Cono *cono = &objeto->u.cono;
+
+            *normal = normal_cono(punto, cono);
+            *color = cono->color;
+            *material = cono->material;
+            break;
+        }
+
+        case TIPO_CUADRATICA: {
+            const Cuadratica *s = &objeto->u.cuadratica;
+
+            *normal = normal_cuadratica(punto, s);
+            *color = s->color;
+            *material = s->material;
+            break;
+        }
+
+        default:
+            return;
     }
 
-    /*
-     * Orientar la normal hacia el lado desde el cual llega el rayo.
-     * Para una esfera vista desde afuera esto no cambia nada; solo
-     * actua cuando el observador queda dentro del objeto.
-     */
-    if (vec_punto(*normal, direccion) > 0.0)
-    {
+    /* Orientar la normal hacia el rayo incidente */
+    if (vec_punto(*normal, direccion) > 0.0) {
         *normal = vec_escalar(*normal, -1.0);
     }
 }
@@ -207,18 +560,40 @@ static void datos_de_impacto(const Objeto *objeto, Vec3 punto, Vec3 direccion,
 static Material material_de(const Objeto *objeto)
 {
     Material material;
+
     material_defecto(&material);
 
     if (objeto == NULL) {
         return material;
     }
-    if (objeto->tipo == TIPO_ESFERA) {
-        return objeto->u.esfera.material;
+
+    switch (objeto->tipo) {
+
+        case TIPO_ESFERA:
+            return objeto->u.esfera.material;
+
+        case TIPO_POLIGONO:
+            return objeto->u.poligono.material;
+
+        case TIPO_DISCO:
+            return objeto->u.disco.material;
+
+        case TIPO_ELIPSE:
+            return objeto->u.elipse.material;
+       
+        case TIPO_CILINDRO:
+            return objeto->u.cilindro.material;
+      
+        case TIPO_CONO:
+            return objeto->u.cono.material;
+        
+        case TIPO_CUADRATICA:
+            return objeto->u.cuadratica.material;
+
+        
+        default:
+            return material;
     }
-    if (objeto->tipo == TIPO_POLIGONO) {
-        return objeto->u.poligono.material;
-    }
-    return material;
 }
 
 /*
@@ -448,6 +823,9 @@ static Color color_recursivo(const Escena *escena, Vec3 origen,
     material_defecto(&material);
 
     datos_de_impacto(objeto, punto, direccion, &normal, &base, &material);
+    /* Obtener color de la textura si corresponde */
+    base = color_superficie(escena, objeto, punto, base);
+
 
     if (vec_longitud(normal) <= 0.0) {
         return negro;
@@ -519,27 +897,62 @@ Color De_Que_Color(const Escena *escena, Vec3 origen, Vec3 direccion)
 /*  TRAZAR_PIXEL                                                       */
 /* ================================================================== */
 
-Color trazar_pixel(const Escena *escena, int columna, int fila)
+Color trazar_muestra(
+    const Escena *escena,
+    double columna,
+    double fila
+)
 {
-    Color negro = {0.0, 0.0, 0.0};
+    double ancho_ventana =
+        escena->ventana_xmax -
+        escena->ventana_xmin;
 
-    if (!escena || escena->ancho <= 0 || escena->alto <= 0 ||
-        columna < 0 || columna >= escena->ancho ||
-        fila < 0 || fila >= escena->alto) {
-        return negro;
+    double alto_ventana =
+        escena->ventana_ymax -
+        escena->ventana_ymin;
+
+    double x =
+        escena->ventana_xmin +
+        (columna / escena->ancho) *
+        ancho_ventana;
+
+    double y =
+        escena->ventana_ymax -
+        (fila / escena->alto) *
+        alto_ventana;
+
+    Vec3 punto = {x, y, 0.0};
+
+    Vec3 direccion = vec_normalizar(
+        vec_restar(punto, escena->ojo)
+    );
+
+    return De_Que_Color(
+        escena,
+        escena->ojo,
+        direccion
+    );
+}
+
+Color trazar_pixel(
+    const Escena *escena,
+    int columna,
+    int fila
+)
+{
+    if (escena->antialiasing) {
+
+        return antialiasing_pixel(
+            escena,
+            columna,
+            fila
+        );
     }
 
-    /* El centro del pixel se proyecta en el plano de imagen z = 0 */
-    double x = escena->ventana_xmin +
-        ((double)columna + 0.5) / escena->ancho *
-        (escena->ventana_xmax - escena->ventana_xmin);
-
-    double y = escena->ventana_ymax -
-        ((double)fila + 0.5) / escena->alto *
-        (escena->ventana_ymax - escena->ventana_ymin);
-
-    Vec3 punto_ventana = {x, y, 0.0};
-    Vec3 direccion = vec_restar(punto_ventana, escena->ojo);
-
-    return De_Que_Color(escena, escena->ojo, direccion);
+    /* Una muestra en el centro del pixel */
+    return trazar_muestra(
+        escena,
+        columna + 0.5,
+        fila + 0.5
+    );
 }

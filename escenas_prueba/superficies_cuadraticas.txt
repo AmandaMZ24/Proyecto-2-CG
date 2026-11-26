@@ -1,0 +1,49 @@
+# Prueba de superficies cuadraticas
+
+resolucion 1300 760
+ojo 0 0 -10
+ventana -6.5 -3.8 6.5 3.8
+fondo 0.08 0.08 0.12
+ambiente 0.5
+
+luz -5 5 -5 1.0
+luz 5 3 -4 0.7
+
+# Elipsoide rojo centrado en (-4,2,5)
+cuadratica 1 2.25 2.25 0 0 0 8 -9 -22.5 79 0.9 0.1 0.1
+
+# Esfera azul mediante ecuacion cuadratica
+# Centro (0,2,5), radio 1.5
+cuadratica 1 1 1 0 0 0 0 -4 -10 26.75 0.1 0.4 0.9
+
+# Elipsoide verde vertical
+# Centro (4,2,5)
+cuadratica 4 1 4 0 0 0 -32 -4 -40 164 0.1 0.9 0.3
+
+# Hiperboloide amarillo
+# Centro (-4,-2,5)
+cuadratica 1 -0.25 1 0 0 0 8 -1 -10 39 0.9 0.8 0.1
+corte 0 1 0 0
+corte 0 -1 0 -4
+
+# Paraboloide morado
+cuadratica 1 0 1 0 0 0 0 -1 -10 21 0.7 0.2 0.9
+corte 0 1 0 0
+
+# Hiperboloide naranja
+# Centro (4,-2,5)
+cuadratica 1 -0.25 1 0 0 0 -8 -1 -10 39 1.0 0.5 0.1
+corte 0 1 0 0
+corte 0 -1 0 -4
+
+# Ocho esferas requeridas por el lector
+esfera -7 9 10 0.3 1 1 1
+esfera -5 9 10 0.3 1 1 1
+esfera -3 9 10 0.3 1 1 1
+esfera -1 9 10 0.3 1 1 1
+esfera 1 9 10 0.3 1 1 1
+esfera 3 9 10 0.3 1 1 1
+esfera 5 9 10 0.3 1 1 1
+esfera 7 9 10 0.3 1 1 1
+
+fin

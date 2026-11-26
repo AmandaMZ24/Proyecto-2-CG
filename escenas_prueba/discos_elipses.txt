@@ -1,0 +1,40 @@
+# Prueba de discos y elipses
+
+resolucion 1300 760
+ojo 0 0 -10
+ventana -6.5 -3.8 6.5 3.8
+fondo 0.08 0.08 0.12
+ambiente 0.5
+
+luz -5 5 -5 1.0
+luz 5 3 -4 0.7
+
+# Disco rojo frontal
+disco -5 2 5 0 0 -1 2 0.9 0.1 0.1
+
+# Disco azul inclinado
+disco 0 2 5 0.5 0 -1 2 0.1 0.4 0.9
+
+# Disco verde inclinado
+disco 5 2 5 0 0.7 -1 2 0.1 0.9 0.3
+
+# Elipse amarilla horizontal
+elipse -6 -3 5 -3 -3 5 0 0 -1 5 0.9 0.8 0.1
+
+# Elipse morada vertical
+elipse 0 -4 5 0 -2 5 0 0 -1 3.5 0.7 0.2 0.9
+
+# Elipse naranja horizontal
+elipse 4 -3 5 6 -3 5 0 0 -1 4 1.0 0.5 0.1
+
+# Ocho esferas pequeñas por la restriccion del lector
+esfera -7 6 10 0.3 1 1 1
+esfera -5 6 10 0.3 1 1 1
+esfera -3 6 10 0.3 1 1 1
+esfera -1 6 10 0.3 1 1 1
+esfera 1 6 10 0.3 1 1 1
+esfera 3 6 10 0.3 1 1 1
+esfera 5 6 10 0.3 1 1 1
+esfera 7 6 10 0.3 1 1 1
+
+fin

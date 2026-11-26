@@ -7,6 +7,8 @@
  */
 #include "escena.h"
 #include "poligonos.h"
+#include "vectores.h"
+#include "texturas.h"
 
 #include <ctype.h>
 #include <errno.h>
@@ -58,6 +60,12 @@ void escena_inicializar(Escena *escena)
     if (escena->objetos == NULL) {
         escena->cap_objetos = 0;
     }
+
+    escena->texturas = NULL;
+    escena->num_texturas = 0;
+    escena->cap_texturas = 0;
+
+    escena->antialiasing = 1;
 
     escena->cap_luces = 4;
     escena->num_luces = 0;
@@ -215,27 +223,73 @@ static int material_valido(const Material *m)
  */
 static Material *material_ultimo(Escena *e)
 {
-    Objeto *ultimo;
+    if (e == NULL ||
+        e->num_objetos <= 0 ||
+        e->objetos == NULL) {
 
-    if (e == NULL || e->num_objetos <= 0 || e->objetos == NULL) {
         return NULL;
     }
 
-    ultimo = &e->objetos[e->num_objetos - 1];
+    Objeto *ultimo = &e->objetos[e->num_objetos - 1];
 
-    if (ultimo->tipo == TIPO_ESFERA) {
-        return &ultimo->u.esfera.material;
-    }
-    if (ultimo->tipo == TIPO_POLIGONO) {
-        return &ultimo->u.poligono.material;
-    }
+    switch (ultimo->tipo) {
 
-    return NULL;
+        case TIPO_ESFERA:
+            return &ultimo->u.esfera.material;
+
+        case TIPO_POLIGONO:
+            return &ultimo->u.poligono.material;
+
+        case TIPO_DISCO:
+            return &ultimo->u.disco.material;
+
+        case TIPO_ELIPSE:
+            return &ultimo->u.elipse.material;
+        
+        case TIPO_CILINDRO:
+            return &ultimo->u.cilindro.material;
+        
+        case TIPO_CONO:
+            return &ultimo->u.cono.material;
+
+        case TIPO_CUADRATICA:
+            return &ultimo->u.cuadratica.material;
+        
+        default:
+            return NULL;
+    }
 }
 
 /* ------------------------------------------------------------------ */
 /* Carga de objetos                                                    */
 /* ------------------------------------------------------------------ */
+static Objeto *reservar_objeto(Escena *escena)
+{
+    if (escena == NULL) {
+        return NULL;
+    }
+
+    if (escena->num_objetos >= escena->cap_objetos) {
+
+        int nueva_cap = escena->cap_objetos > 0
+            ? escena->cap_objetos * 2
+            : ESCENA_CAP_INICIAL;
+
+        Objeto *crecido = realloc(
+            escena->objetos,
+            (size_t)nueva_cap * sizeof(Objeto)
+        );
+
+        if (crecido == NULL) {
+            return NULL;
+        }
+
+        escena->objetos = crecido;
+        escena->cap_objetos = nueva_cap;
+    }
+
+    return &escena->objetos[escena->num_objetos];
+}
 
 int escena_agregar_esfera(Escena *escena, Vec3 centro, double radio,
                           Color color, Material material)
@@ -262,6 +316,10 @@ int escena_agregar_esfera(Escena *escena, Vec3 centro, double radio,
 
     nuevo = &escena->objetos[escena->num_objetos];
     nuevo->tipo       = TIPO_ESFERA;
+    nuevo->textura = 0;
+    nuevo->textura_g = (Vec3){1.0, 0.0, 0.0};
+    nuevo->textura_norte = (Vec3){0.0, 1.0, 0.0};
+    nuevo->num_planos_corte = 0;
     nuevo->u.esfera.centro = centro;
     nuevo->u.esfera.radio  = radio;
     nuevo->u.esfera.color  = color;
@@ -359,6 +417,10 @@ int escena_agregar_poligono(
     /*Agregar el nuevo objeto*/
     Objeto *nuevo = &escena->objetos[escena->num_objetos];
     nuevo->tipo = TIPO_POLIGONO;
+    nuevo->textura = 0;
+    nuevo->textura_g = (Vec3){1.0, 0.0, 0.0};
+    nuevo->textura_norte = (Vec3){0.0, 1.0, 0.0};
+    nuevo->num_planos_corte = 0;
     nuevo->u.poligono.vertices = copia;
     nuevo->u.poligono.num_vertices = num_vertices;
     nuevo->u.poligono.normal = normal;
@@ -370,30 +432,466 @@ int escena_agregar_poligono(
     return 1;
 }
 
+int escena_agregar_disco(
+    Escena *escena,
+    Vec3 centro,
+    Vec3 normal,
+    double radio,
+    Color color,
+    Material material
+)
+{
+    const double EPSILON = 1e-9;
+
+    if (escena == NULL ||
+        !material_valido(&material) ||
+        !isfinite(radio) ||
+        radio <= 0.0 ||
+        vec_longitud(normal) <= EPSILON) {
+
+        return 0;
+    }
+
+    Objeto *nuevo = reservar_objeto(escena);
+
+    if (nuevo == NULL) {
+        return 0;
+    }
+
+    nuevo->tipo = TIPO_DISCO;
+    nuevo->textura = 0;
+    nuevo->textura_g = (Vec3){1.0, 0.0, 0.0};
+    nuevo->textura_norte = (Vec3){0.0, 1.0, 0.0};
+    nuevo->num_planos_corte = 0;
+    nuevo->u.disco.centro = centro;
+    nuevo->u.disco.normal = vec_normalizar(normal);
+    nuevo->u.disco.radio = radio;
+    nuevo->u.disco.color = color;
+    nuevo->u.disco.material = material;
+
+    escena->num_objetos++;
+
+    return 1;
+}
+
+int escena_agregar_elipse(
+    Escena *escena,
+    Vec3 foco1,
+    Vec3 foco2,
+    Vec3 normal,
+    double distancia_maxima,
+    Color color,
+    Material material
+)
+{
+    const double EPSILON = 1e-9;
+
+    if (escena == NULL ||
+        !material_valido(&material) ||
+        !isfinite(distancia_maxima) ||
+        distancia_maxima <= 0.0 ||
+        vec_longitud(normal) <= EPSILON) {
+
+        return 0;
+    }
+
+    normal = vec_normalizar(normal);
+
+    Vec3 diferencia = vec_restar(foco2, foco1);
+
+    double distancia_focos = vec_longitud(diferencia);
+
+    /* Evitar elipses degeneradas */
+    if (distancia_maxima <= distancia_focos + EPSILON) {
+        return 0;
+    }
+
+    /* Validar coplanaridad */
+    if (fabs(vec_punto(normal, diferencia)) > EPSILON) {
+        return 0;
+    }
+
+    Objeto *nuevo = reservar_objeto(escena);
+
+    if (nuevo == NULL) {
+        return 0;
+    }
+
+    nuevo->tipo = TIPO_ELIPSE;
+    nuevo->textura = 0;
+    nuevo->textura_g = (Vec3){1.0, 0.0, 0.0};
+    nuevo->textura_norte = (Vec3){0.0, 1.0, 0.0};
+    nuevo->num_planos_corte = 0;
+    nuevo->u.elipse.foco1 = foco1;
+    nuevo->u.elipse.foco2 = foco2;
+    nuevo->u.elipse.normal = normal;
+    nuevo->u.elipse.distancia_maxima = distancia_maxima;
+    nuevo->u.elipse.color = color;
+    nuevo->u.elipse.material = material;
+
+    escena->num_objetos++;
+
+    return 1;
+}
+
+int escena_agregar_cilindro(
+    Escena *escena,
+    Vec3 ancla,
+    Vec3 eje,
+    double radio,
+    double d_min,
+    double d_max,
+    Color color,
+    Material material
+)
+{
+    const double EPSILON = 1e-9;
+
+    if (escena == NULL ||
+        !material_valido(&material) ||
+        !isfinite(radio) ||
+        radio <= 0.0 ||
+        !isfinite(d_min) ||
+        !isfinite(d_max) ||
+        d_min >= d_max ||
+        vec_longitud(eje) <= EPSILON) {
+
+        return 0;
+    }
+
+    Objeto *nuevo = reservar_objeto(escena);
+
+    if (nuevo == NULL) {
+        return 0;
+    }
+
+    nuevo->tipo = TIPO_CILINDRO;
+    nuevo->textura = 0;
+    nuevo->textura_g = (Vec3){1.0, 0.0, 0.0};
+    nuevo->textura_norte = (Vec3){0.0, 1.0, 0.0};
+    nuevo->num_planos_corte = 0;
+    nuevo->u.cilindro.ancla = ancla;
+    nuevo->u.cilindro.eje = vec_normalizar(eje);
+    nuevo->u.cilindro.radio = radio;
+    nuevo->u.cilindro.d_min = d_min;
+    nuevo->u.cilindro.d_max = d_max;
+    nuevo->u.cilindro.color = color;
+    nuevo->u.cilindro.material = material;
+
+    escena->num_objetos++;
+
+    return 1;
+}
+
+int escena_agregar_cono(
+    Escena *escena,
+    Vec3 vertice,
+    Vec3 eje,
+    double m,
+    double n,
+    double d_min,
+    double d_max,
+    Color color,
+    Material material
+)
+{
+    const double EPSILON = 1e-9;
+
+    if (escena == NULL ||
+        !material_valido(&material) ||
+        !isfinite(m) ||
+        !isfinite(n) ||
+        !isfinite(d_min) ||
+        !isfinite(d_max) ||
+        m <= EPSILON ||
+        n <= EPSILON ||
+        d_min >= d_max ||
+        vec_longitud(eje) <= EPSILON) {
+
+        return 0;
+    }
+
+    Objeto *nuevo = reservar_objeto(escena);
+
+    if (nuevo == NULL) {
+        return 0;
+    }
+
+    nuevo->tipo = TIPO_CONO;
+    nuevo->textura = 0;
+    nuevo->textura_g = (Vec3){1.0, 0.0, 0.0};
+    nuevo->textura_norte = (Vec3){0.0, 1.0, 0.0};
+    nuevo->num_planos_corte = 0;
+    nuevo->u.cono.vertice = vertice;
+    nuevo->u.cono.eje = vec_normalizar(eje);
+    nuevo->u.cono.m = m;
+    nuevo->u.cono.n = n;
+    nuevo->u.cono.d_min = d_min;
+    nuevo->u.cono.d_max = d_max;
+    nuevo->u.cono.color = color;
+    nuevo->u.cono.material = material;
+
+    escena->num_objetos++;
+
+    return 1;
+}
+
+int escena_agregar_cuadratica(
+    Escena *escena,
+    Cuadratica superficie
+)
+{
+    if (escena == NULL ||
+        !material_valido(&superficie.material)) {
+
+        return 0;
+    }
+
+    double coeficientes[] = {
+        superficie.A,
+        superficie.B,
+        superficie.C,
+        superficie.D,
+        superficie.E,
+        superficie.F,
+        superficie.G,
+        superficie.H,
+        superficie.I,
+        superficie.J
+    };
+
+    int tiene_termino_variable = 0;
+
+    for (int i = 0; i < 10; i++) {
+
+        if (!isfinite(coeficientes[i])) {
+            return 0;
+        }
+
+        if (i < 9 && coeficientes[i] != 0.0) {
+            tiene_termino_variable = 1;
+        }
+    }
+
+    /* Rechazar ecuaciones constantes */
+    if (!tiene_termino_variable) {
+        return 0;
+    }
+
+    Objeto *nuevo = reservar_objeto(escena);
+
+    if (nuevo == NULL) {
+        return 0;
+    }
+
+    *nuevo = (Objeto){0};
+
+    nuevo->tipo = TIPO_CUADRATICA;
+    nuevo->textura = 0;
+    nuevo->textura_g = (Vec3){1.0, 0.0, 0.0};
+    nuevo->textura_norte = (Vec3){0.0, 1.0, 0.0};
+    nuevo->u.cuadratica = superficie;
+
+    escena->num_objetos++;
+
+    return 1;
+}
+
+int escena_agregar_plano_corte(
+    Escena *escena,
+    PlanoCorte plano
+)
+{
+    const double EPSILON = 1e-9;
+
+    if (escena == NULL ||
+        escena->objetos == NULL ||
+        escena->num_objetos <= 0) {
+
+        return 0;
+    }
+
+    if (!isfinite(plano.A) ||
+        !isfinite(plano.B) ||
+        !isfinite(plano.C) ||
+        !isfinite(plano.D)) {
+
+        return 0;
+    }
+
+    Objeto *ultimo =
+        &escena->objetos[escena->num_objetos - 1];
+
+    if (ultimo->num_planos_corte < 0 ||
+        ultimo->num_planos_corte >= MAX_PLANOS_CORTE) {
+
+        return 0;
+    }
+
+    /* Normalizar los coeficientes del plano */
+    double longitud = hypot(
+        hypot(plano.A, plano.B),
+        plano.C
+    );
+
+    if (!isfinite(longitud) ||
+        longitud <= EPSILON) {
+        return 0;
+    }
+
+    plano.A /= longitud;
+    plano.B /= longitud;
+    plano.C /= longitud;
+    plano.D /= longitud;
+
+    /* Guardar el plano en el ultimo objeto */
+    ultimo->planos_corte[
+        ultimo->num_planos_corte
+    ] = plano;
+
+    ultimo->num_planos_corte++;
+
+    return 1;
+}
+
+int escena_cargar_textura(
+    Escena *escena,
+    const char *ruta
+)
+{
+    if (escena == NULL || ruta == NULL) {
+        return 0;
+    }
+
+    Textura nueva = {0};
+
+    /* Cargar la imagen AVS */
+    if (!cargar_textura_avs(ruta, &nueva)) {
+        return 0;
+    }
+
+    /* Ampliar el arreglo si es necesario */
+    if (escena->num_texturas >= escena->cap_texturas) {
+
+        int nueva_cap =
+            escena->cap_texturas > 0
+            ? escena->cap_texturas * 2
+            : 8;
+
+        Textura *crecido = realloc(
+            escena->texturas,
+            (size_t)nueva_cap * sizeof(Textura)
+        );
+
+        if (crecido == NULL) {
+
+            liberar_textura(&nueva);
+
+            return 0;
+        }
+
+        escena->texturas = crecido;
+        escena->cap_texturas = nueva_cap;
+    }
+
+    /* Guardar la textura */
+    escena->texturas[
+        escena->num_texturas
+    ] = nueva;
+
+    escena->num_texturas++;
+
+    return 1;
+}
+
+int escena_aplicar_textura(
+    Escena *escena,
+    int indice
+)
+{
+    if (escena == NULL ||
+        escena->objetos == NULL ||
+        escena->num_objetos <= 0 ||
+        indice < 0 ||
+        indice > escena->num_texturas) {
+
+        return 0;
+    }
+
+    Objeto *ultimo =
+        &escena->objetos[escena->num_objetos - 1];
+
+    /* Solo admitir las primitivas con mapeo UV */
+    if (indice != 0 &&
+        ultimo->tipo != TIPO_POLIGONO &&
+        ultimo->tipo != TIPO_CILINDRO &&
+        ultimo->tipo != TIPO_ESFERA) {
+
+        return 0;
+    }
+
+    ultimo->textura = indice;
+
+    return 1;
+}
+
+int escena_orientar_textura(
+    Escena *escena,
+    Vec3 G,
+    Vec3 norte
+)
+{
+    const double EPSILON = 1e-9;
+
+    if (escena == NULL ||
+        escena->objetos == NULL ||
+        escena->num_objetos <= 0) {
+
+        return 0;
+    }
+
+    if (vec_longitud(G) <= EPSILON ||
+        vec_longitud(norte) <= EPSILON) {
+
+        return 0;
+    }
+
+    Objeto *ultimo =
+        &escena->objetos[escena->num_objetos - 1];
+
+    if (ultimo->tipo != TIPO_ESFERA &&
+        ultimo->tipo != TIPO_CILINDRO) {
+
+        return 0;
+    }
+
+    ultimo->textura_g = vec_normalizar(G);
+
+    ultimo->textura_norte =
+        vec_normalizar(norte);
+
+    return 1;
+}
 /* =========================================================
    APLICAR MATERIAL AL ULTIMO OBJETO
    ========================================================= */
 
-int escena_aplicar_material(Escena *escena, Material material)
+int escena_aplicar_material(
+    Escena *escena,
+    Material material
+)
 {
-    if (escena == NULL ||
-        escena->num_objetos <= 0 ||
-        escena->objetos == NULL ||
-        !material_valido(&material)) {
+    if (!material_valido(&material)) {
         return 0;
     }
 
-    Objeto *ultimo = &escena->objetos[escena->num_objetos - 1];
+    Material *destino = material_ultimo(escena);
 
-    if (ultimo->tipo == TIPO_ESFERA) {
-        ultimo->u.esfera.material = material;
-    }
-    else if (ultimo->tipo == TIPO_POLIGONO) {
-        ultimo->u.poligono.material = material;
-    }
-    else {
+    if (destino == NULL) {
         return 0;
     }
+
+    *destino = material;
 
     return 1;
 }
@@ -605,6 +1103,597 @@ static int a_material(Escena *e, char *tokens[], int inicio, int linea,
                  "material invalido en \"%s\": ka, kd y ks en [0, 1] "
                  "y kn mayor que cero", clave);
         fijar_error(e, linea, nombre, motivo);
+        return 0;
+    }
+
+    return 1;
+}
+
+static int leer_disco(
+    Escena *e,
+    char *tokens[],
+    int n,
+    int linea,
+    const char *nombre
+)
+{
+    double v[10];
+    Material material;
+
+    if (n != 11 && n != 15) {
+        fijar_error(
+            e, linea, nombre,
+            "cantidad incorrecta de argumentos para disco"
+        );
+
+        return 0;
+    }
+
+    for (int i = 0; i < 10; i++) {
+
+        if (!a_doble(tokens[i + 1], &v[i])) {
+
+            fijar_error(
+                e, linea, nombre,
+                "parametro numerico invalido para disco"
+            );
+
+            return 0;
+        }
+    }
+
+    Vec3 centro = {v[0], v[1], v[2]};
+    Vec3 normal = {v[3], v[4], v[5]};
+    double radio = v[6];
+
+    Color color = {v[7], v[8], v[9]};
+
+    if (color.r < 0.0 || color.r > 1.0 ||
+        color.g < 0.0 || color.g > 1.0 ||
+        color.b < 0.0 || color.b > 1.0) {
+
+        fijar_error(
+            e, linea, nombre,
+            "color del disco fuera de rango"
+        );
+
+        return 0;
+    }
+
+    material_defecto(&material);
+
+    if (n == 15 &&
+        !a_material(
+            e, tokens, 11, linea,
+            nombre, "disco", &material)) {
+
+        return 0;
+    }
+
+    if (!escena_agregar_disco(
+            e, centro, normal,
+            radio, color, material)) {
+
+        fijar_error(
+            e, linea, nombre,
+            "no se pudo agregar el disco"
+        );
+
+        return 0;
+    }
+
+    return 1;
+}
+
+static int leer_elipse(
+    Escena *e,
+    char *tokens[],
+    int n,
+    int linea,
+    const char *nombre
+)
+{
+    double v[13];
+    Material material;
+
+    if (n != 14 && n != 18) {
+
+        fijar_error(
+            e, linea, nombre,
+            "cantidad incorrecta de argumentos para elipse"
+        );
+
+        return 0;
+    }
+
+    for (int i = 0; i < 13; i++) {
+
+        if (!a_doble(tokens[i + 1], &v[i])) {
+
+            fijar_error(
+                e, linea, nombre,
+                "parametro numerico invalido para elipse"
+            );
+
+            return 0;
+        }
+    }
+
+    Vec3 foco1 = {v[0], v[1], v[2]};
+    Vec3 foco2 = {v[3], v[4], v[5]};
+    Vec3 normal = {v[6], v[7], v[8]};
+
+    double distancia_maxima = v[9];
+
+    Color color = {v[10], v[11], v[12]};
+
+    if (color.r < 0.0 || color.r > 1.0 ||
+        color.g < 0.0 || color.g > 1.0 ||
+        color.b < 0.0 || color.b > 1.0) {
+
+        fijar_error(
+            e, linea, nombre,
+            "color de la elipse fuera de rango"
+        );
+
+        return 0;
+    }
+
+    material_defecto(&material);
+
+    if (n == 18 &&
+        !a_material(
+            e, tokens, 14, linea,
+            nombre, "elipse", &material)) {
+
+        return 0;
+    }
+
+    if (!escena_agregar_elipse(
+            e, foco1, foco2,
+            normal, distancia_maxima,
+            color, material)) {
+
+        fijar_error(
+            e, linea, nombre,
+            "no se pudo agregar la elipse"
+        );
+
+        return 0;
+    }
+
+    return 1;
+}
+
+static int leer_cilindro(
+    Escena *e,
+    char *tokens[],
+    int n,
+    int linea,
+    const char *nombre
+)
+{
+    double v[12];
+    Material material;
+
+    if (n != 13 && n != 17) {
+        fijar_error(
+            e, linea, nombre,
+            "cantidad incorrecta de argumentos para cilindro"
+        );
+
+        return 0;
+    }
+
+    for (int i = 0; i < 12; i++) {
+
+        if (!a_doble(tokens[i + 1], &v[i])) {
+
+            fijar_error(
+                e, linea, nombre,
+                "parametro numerico invalido para cilindro"
+            );
+
+            return 0;
+        }
+    }
+
+    Vec3 ancla = {v[0], v[1], v[2]};
+    Vec3 eje = {v[3], v[4], v[5]};
+
+    double radio = v[6];
+    double d_min = v[7];
+    double d_max = v[8];
+
+    Color color = {v[9], v[10], v[11]};
+
+    if (color.r < 0.0 || color.r > 1.0 ||
+        color.g < 0.0 || color.g > 1.0 ||
+        color.b < 0.0 || color.b > 1.0) {
+
+        fijar_error(
+            e, linea, nombre,
+            "color del cilindro fuera de rango"
+        );
+
+        return 0;
+    }
+
+    material_defecto(&material);
+
+    if (n == 17 &&
+        !a_material(
+            e, tokens, 13, linea,
+            nombre, "cilindro", &material)) {
+
+        return 0;
+    }
+
+    if (!escena_agregar_cilindro(
+            e, ancla, eje,
+            radio, d_min, d_max,
+            color, material)) {
+
+        fijar_error(
+            e, linea, nombre,
+            "no se pudo agregar el cilindro"
+        );
+
+        return 0;
+    }
+
+    return 1;
+}
+
+static int leer_cono(
+    Escena *e,
+    char *tokens[],
+    int n,
+    int linea,
+    const char *nombre
+)
+{
+    double v[13];
+    Material material;
+
+    if (n != 14 && n != 18) {
+
+        fijar_error(
+            e, linea, nombre,
+            "cantidad incorrecta de argumentos para cono"
+        );
+
+        return 0;
+    }
+
+    for (int i = 0; i < 13; i++) {
+
+        if (!a_doble(tokens[i + 1], &v[i])) {
+
+            fijar_error(
+                e, linea, nombre,
+                "parametro numerico invalido para cono"
+            );
+
+            return 0;
+        }
+    }
+
+    Vec3 vertice = {v[0], v[1], v[2]};
+    Vec3 eje = {v[3], v[4], v[5]};
+
+    double m = v[6];
+    double razon_n = v[7];
+
+    double d_min = v[8];
+    double d_max = v[9];
+
+    Color color = {v[10], v[11], v[12]};
+
+    if (color.r < 0.0 || color.r > 1.0 ||
+        color.g < 0.0 || color.g > 1.0 ||
+        color.b < 0.0 || color.b > 1.0) {
+
+        fijar_error(
+            e, linea, nombre,
+            "color del cono fuera de rango"
+        );
+
+        return 0;
+    }
+
+    material_defecto(&material);
+
+    if (n == 18 &&
+        !a_material(
+            e, tokens, 14, linea,
+            nombre, "cono", &material)) {
+
+        return 0;
+    }
+
+    if (!escena_agregar_cono(
+            e, vertice, eje,
+            m, razon_n, d_min, d_max,
+            color, material)) {
+
+        fijar_error(
+            e, linea, nombre,
+            "no se pudo agregar el cono"
+        );
+
+        return 0;
+    }
+
+    return 1;
+}
+
+static int leer_cuadratica(
+    Escena *e,
+    char *tokens[],
+    int n,
+    int linea,
+    const char *nombre
+)
+{
+    double v[13];
+
+    if (n != 14 && n != 18) {
+
+        fijar_error(
+            e, linea, nombre,
+            "cantidad incorrecta de argumentos para cuadratica"
+        );
+
+        return 0;
+    }
+
+    for (int i = 0; i < 13; i++) {
+
+        if (!a_doble(tokens[i + 1], &v[i])) {
+
+            fijar_error(
+                e, linea, nombre,
+                "parametro numerico invalido para cuadratica"
+            );
+
+            return 0;
+        }
+    }
+
+    Cuadratica superficie = {0};
+
+    superficie.A = v[0];
+    superficie.B = v[1];
+    superficie.C = v[2];
+    superficie.D = v[3];
+    superficie.E = v[4];
+    superficie.F = v[5];
+    superficie.G = v[6];
+    superficie.H = v[7];
+    superficie.I = v[8];
+    superficie.J = v[9];
+
+    superficie.color = (Color){
+        v[10], v[11], v[12]
+    };
+
+    if (v[10] < 0.0 || v[10] > 1.0 ||
+        v[11] < 0.0 || v[11] > 1.0 ||
+        v[12] < 0.0 || v[12] > 1.0) {
+
+        fijar_error(
+            e, linea, nombre,
+            "color de la cuadratica fuera de rango"
+        );
+
+        return 0;
+    }
+
+    material_defecto(&superficie.material);
+
+    if (n == 18 &&
+        !a_material(
+            e, tokens, 14, linea,
+            nombre, "cuadratica",
+            &superficie.material)) {
+
+        return 0;
+    }
+
+    if (!escena_agregar_cuadratica(
+            e, superficie)) {
+
+        fijar_error(
+            e, linea, nombre,
+            "no se pudo agregar la cuadratica"
+        );
+
+        return 0;
+    }
+
+    return 1;
+}
+
+static int leer_corte(
+    Escena *e,
+    char *tokens[],
+    int n,
+    int linea,
+    const char *nombre
+)
+{
+    double v[4];
+
+    if (n != 5) {
+
+        fijar_error(
+            e, linea, nombre,
+            "corte espera cuatro coeficientes"
+        );
+
+        return 0;
+    }
+
+    for (int i = 0; i < 4; i++) {
+
+        if (!a_doble(tokens[i + 1], &v[i])) {
+
+            fijar_error(
+                e, linea, nombre,
+                "coeficiente invalido para plano de corte"
+            );
+
+            return 0;
+        }
+    }
+
+    PlanoCorte plano = {
+        v[0], v[1], v[2], v[3]
+    };
+
+    if (!escena_agregar_plano_corte(e, plano)) {
+
+        fijar_error(
+            e, linea, nombre,
+            "plano de corte invalido o sin objeto previo"
+        );
+
+        return 0;
+    }
+
+    return 1;
+}
+
+static int leer_textura_cargar(
+    Escena *e,
+    char *tokens[],
+    int n,
+    int linea,
+    const char *nombre
+)
+{
+    if (n != 2) {
+
+        fijar_error(
+            e, linea, nombre,
+            "textura_cargar espera una ruta AVS"
+        );
+
+        return 0;
+    }
+
+    if (!escena_cargar_textura(
+            e, tokens[1])) {
+
+        fijar_error(
+            e, linea, nombre,
+            "no se pudo cargar el archivo de textura"
+        );
+
+        return 0;
+    }
+
+    return 1;
+}
+
+static int leer_textura(
+    Escena *e,
+    char *tokens[],
+    int n,
+    int linea,
+    const char *nombre
+)
+{
+    double valor;
+
+    if (n != 2 ||
+        !a_doble(tokens[1], &valor)) {
+
+        fijar_error(
+            e, linea, nombre,
+            "textura espera un indice entero"
+        );
+
+        return 0;
+    }
+
+    if (!isfinite(valor) ||
+        valor < 0.0 ||
+        valor > e->num_texturas ||
+        floor(valor) != valor) {
+
+        fijar_error(
+            e, linea, nombre,
+            "indice de textura invalido"
+        );
+
+        return 0;
+    }
+
+    if (!escena_aplicar_textura(
+            e, (int)valor)) {
+
+        fijar_error(
+            e, linea, nombre,
+            "no se pudo aplicar la textura al objeto"
+        );
+
+        return 0;
+    }
+
+    return 1;
+}
+
+static int leer_textura_orientacion(
+    Escena *e,
+    char *tokens[],
+    int n,
+    int linea,
+    const char *nombre
+)
+{
+    double v[6];
+
+    if (n != 7) {
+
+        fijar_error(
+            e, linea, nombre,
+            "textura_orientacion espera seis valores"
+        );
+
+        return 0;
+    }
+
+    for (int i = 0; i < 6; i++) {
+
+        if (!a_doble(tokens[i + 1], &v[i])) {
+
+            fijar_error(
+                e, linea, nombre,
+                "orientacion de textura invalida"
+            );
+
+            return 0;
+        }
+    }
+
+    Vec3 G = {
+        v[0], v[1], v[2]
+    };
+
+    Vec3 norte = {
+        v[3], v[4], v[5]
+    };
+
+    if (!escena_orientar_textura(
+            e, G, norte)) {
+
+        fijar_error(
+            e, linea, nombre,
+            "no se pudo orientar la textura"
+        );
+
         return 0;
     }
 
@@ -1104,6 +2193,80 @@ int escena_leer_flujo(Escena *escena, FILE *flujo, const char *nombre)
             continue;
         }
 
+        if (strcmp(tokens[0], "disco") == 0) {
+            if (!leer_disco(escena, tokens, n, num_linea, nombre)) {
+                return 0;
+            }
+            continue;
+        }
+        
+        if (strcmp(tokens[0], "elipse") == 0) {
+            if (!leer_elipse(escena, tokens, n, num_linea, nombre)) {
+                return 0;
+            }
+        continue;
+        }
+
+        if (strcmp(tokens[0], "cilindro") == 0) {
+            if (!leer_cilindro(escena, tokens, n, num_linea, nombre)) {
+                return 0;
+            }
+            continue;
+        }
+
+        if (strcmp(tokens[0], "cono") == 0) {
+            if (!leer_cono(escena, tokens, n, num_linea, nombre)) {
+                return 0;
+            }
+            continue;
+        }
+
+        if (strcmp(tokens[0], "cuadratica") == 0) {
+            if (!leer_cuadratica(escena, tokens, n, num_linea, nombre)) {
+                return 0;
+            }
+            continue;
+        }
+
+        if (strcmp(tokens[0], "corte") == 0) {
+            if (!leer_corte(escena, tokens, n, num_linea, nombre)) {
+                return 0;
+            }
+            continue;
+        }
+
+        if (strcmp(tokens[0], "textura_cargar") == 0) {
+            if (!leer_textura_cargar(escena, tokens, n, num_linea, nombre)) {
+                return 0;
+            }
+            continue;
+        }
+
+        if (strcmp(tokens[0], "textura") == 0) {
+            if (!leer_textura(escena, tokens, n, num_linea, nombre)) {
+                return 0;
+            }
+            continue;
+        }
+
+        if (strcmp(tokens[0], "textura_orientacion") == 0) {
+            if (!leer_textura_orientacion(escena, tokens, n, num_linea, nombre)) {
+                return 0;
+            }
+            continue;
+        }
+
+        if (strcmp(tokens[0], "antialiasing") == 0) {
+            if(n != 2 || (strcmp(tokens[1], "0") != 0 && strcmp(tokens[1], "1") != 0)) {
+                fijar_error(escena, num_linea, nombre,
+                            "\"antialiasing\" espera un argumento 0 o 1");
+                return 0;
+            }
+            escena->antialiasing = strcmp(tokens[1], "1") == 0;
+
+            continue;
+        }
+        
         /* Leer una fuente de luz */
         if (strcmp(tokens[0], "luz") == 0)
         {
@@ -1250,4 +2413,21 @@ void escena_liberar(Escena *escena)
     escena->luces = NULL;
     escena->num_luces = 0;
     escena->cap_luces = 0;
+
+     /* Liberar los pixeles de cada textura */
+    if (escena->texturas != NULL)
+    {
+        for (int i = 0; i < escena->num_texturas; i++)
+        {
+            liberar_textura(&escena->texturas[i]);
+        }
+
+        /* Liberar el arreglo de texturas */
+        free(escena->texturas);
+    }
+
+    escena->texturas = NULL;
+    escena->num_texturas = 0;
+    escena->cap_texturas = 0;
+    escena->antialiasing = 1;
 }

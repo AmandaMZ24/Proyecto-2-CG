@@ -140,7 +140,7 @@ static void prueba_sombra(void)
         {-10.0, 0.0, 10.0},
         {10.0, 0.0, 10.0}
     };
-    Material m_suelo = {0.5, 0.5, 0.0, 8.0};   /* ks = 0 */
+    Material m_suelo = {0.5, 0.5, 0.0, 8.0, 0.0, 0.0};  /* ks = 0 */
 
     if (!escena_agregar_poligono(&e, suelo, 4, (Color){0.8, 0.8, 0.8}, m_suelo)) {
         printf("[FALLO] no se pudo agregar el suelo\n");
@@ -149,7 +149,7 @@ static void prueba_sombra(void)
     }
 
     /* Esfera que proyecta la sombra */
-    Material m_esfera = {0.2, 0.8, 0.9, 64.0};
+    Material m_esfera = {0.2, 0.8, 0.9, 64.0, 0.0, 0.0};
     escena_agregar_esfera(&e, (Vec3){0.0, 3.0, 0.0}, 1.0,
                           (Color){1.0, 1.0, 1.0}, m_esfera);
 
@@ -213,7 +213,7 @@ static void prueba_especular(void)
 
     printf("Reflexion especular:\n");
 
-    Material m = {0.1, 0.5, 0.5, 64.0};
+    Material m = {0.1, 0.5, 0.5, 64.0, 0.0, 0.0};
     escena_agregar_esfera(&e, (Vec3){0.0, 0.0, 0.0}, 1.0,
                           (Color){1.0, 1.0, 1.0}, m);
 

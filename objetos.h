@@ -9,6 +9,8 @@
  */
 #ifndef OBJETOS_H
 #define OBJETOS_H
+#define MAX_PLANOS_CORTE 8
+
 
 /* ------------------------------------------------------------------ */
 /* Vectores y colores                                                  */
@@ -21,10 +23,23 @@ typedef struct {
 } Vec3;
 
 typedef struct {
+    double A;
+    double B;
+    double C;
+    double D;
+} PlanoCorte;
+
+typedef struct {
     double r;
     double g;
     double b;
 } Color;
+
+typedef struct {
+    int ancho;
+    int alto;
+    unsigned char *pixeles;
+} Textura;
 
 typedef struct {
     Vec3 posicion;
@@ -89,7 +104,12 @@ typedef struct {
 
 typedef enum {
     TIPO_ESFERA = 0,
-    TIPO_POLIGONO = 1
+    TIPO_POLIGONO = 1,
+    TIPO_DISCO = 2,
+    TIPO_ELIPSE = 3,
+    TIPO_CILINDRO = 4,
+    TIPO_CONO = 5,
+    TIPO_CUADRATICA = 6
 } TipoObjeto;
 
 typedef struct {
@@ -107,6 +127,61 @@ typedef struct {
     Material material;
 } Poligono;
 
+typedef struct {
+    Vec3 centro;
+    Vec3 normal;
+    double radio;
+    Color color;
+    Material material;
+} Disco;
+
+typedef struct {
+    Vec3 foco1;
+    Vec3 foco2;
+    Vec3 normal;
+    double distancia_maxima;
+    Color color;
+    Material material;
+} Elipse;
+
+typedef struct {
+    Vec3 ancla;
+    Vec3 eje;
+    double radio;
+    double d_min;
+    double d_max;
+    Color color;
+    Material material;
+} Cilindro;
+
+typedef struct {
+    Vec3 vertice;
+    Vec3 eje;
+    double m;
+    double n;
+    double d_min;
+    double d_max;
+    Color color;
+    Material material;
+} Cono;
+
+typedef struct {
+    double A;
+    double B;
+    double C;
+    double D;
+    double E;
+    double F;
+    double G;
+    double H;
+    double I;
+    double J;
+
+    Color color;
+    Material material;
+
+} Cuadratica;
+
 /*
  * Objeto "etiquetado": el campo `tipo` indica que miembro de la union es
  * valido. Nunca se accede a un miembro distinto del que indique `tipo`.
@@ -116,7 +191,18 @@ typedef struct {
     union {
         Esfera esfera;
         Poligono poligono;
+        Disco disco;
+        Elipse elipse;
+        Cilindro cilindro;
+        Cono cono;
+        Cuadratica cuadratica;
     } u;
+    PlanoCorte planos_corte[MAX_PLANOS_CORTE];
+    int num_planos_corte;
+    int textura;
+    Vec3 textura_g;
+    Vec3 textura_norte;
+
 } Objeto;
 
 /* ------------------------------------------------------------------ */
@@ -155,6 +241,12 @@ typedef struct {
     Luz *luces;
     int num_luces;
     int cap_luces;
+
+    Textura *texturas;
+    int num_texturas;
+    int cap_texturas;
+    
+    int antialiasing; /* 0 = desactivado, 1 = activado */
 
     char error[256];      /* descripcion del ultimo error de lectura */
 } Escena;

@@ -1,0 +1,53 @@
+# Prueba de texturas en poligonos, cilindros y esferas
+
+resolucion 1300 760
+antialiasing 1
+ojo 0 0 -10
+ventana -6.5 -3.8 6.5 3.8
+fondo 0.08 0.08 0.12
+ambiente 0.6
+
+luz -5 5 -5 1.0
+luz 5 3 -4 0.7
+
+# Cargar texturas
+textura_cargar texturas/ajedrez.avs
+textura_cargar texturas/colores.avs
+
+# FILA SUPERIOR: AJEDREZ
+
+# Poligono
+poligono 4 -7 0.5 5 -3 0.5 5 -3 4 5 -7 4 5 1 1 1
+textura 1
+
+# Cilindro
+cilindro 0 0.5 5 0 1 0 1.4 0 3.5 1 1 1
+textura 1
+
+# Esfera
+esfera 5 2.2 5 1.8 1 1 1
+textura 1
+
+# FILA INFERIOR: GRADIENTE DE COLORES
+
+# Poligono
+poligono 4 -7 -4 5 -3 -4 5 -3 -0.5 5 -7 -0.5 5 1 1 1
+textura 2
+
+# Cilindro
+cilindro 0 -4 5 0 1 0 1.4 0 3.5 1 1 1
+textura 2
+
+# Esfera
+esfera 5 -2.2 5 1.8 1 1 1
+textura 2
+
+# Seis esferas adicionales para el minimo requerido
+esfera -7 9 10 0.3 1 1 1
+esfera -5 9 10 0.3 1 1 1
+esfera -3 9 10 0.3 1 1 1
+esfera -1 9 10 0.3 1 1 1
+esfera 1 9 10 0.3 1 1 1
+esfera 3 9 10 0.3 1 1 1
+
+fin
