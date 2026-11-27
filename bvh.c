@@ -296,11 +296,10 @@ BVH *bvh_construir(const Escena *escena)
 
     int cantidad = 0;
 
-    /* Contar solamente los poligonos */
+    /* Contar los poligonos */
     for (int i = 0; i < escena->num_objetos; i++) {
 
         if (escena->objetos[i].tipo == TIPO_POLIGONO) {
-
             cantidad++;
         }
     }
@@ -316,6 +315,9 @@ BVH *bvh_construir(const Escena *escena)
     bvh->raiz = -1;
     bvh->num_indices = cantidad;
 
+    bvh->num_restantes =
+        escena->num_objetos - cantidad;
+
     bvh->nodos = malloc(
         (size_t)2 * cantidad * sizeof(NodoBVH)
     );
@@ -328,9 +330,19 @@ BVH *bvh_construir(const Escena *escena)
         (size_t)cantidad * sizeof(ReferenciaBVH)
     );
 
+    /* Reservar espacio para las otras primitivas */
+    if (bvh->num_restantes > 0) {
+
+        bvh->indices_restantes = malloc(
+            (size_t)bvh->num_restantes * sizeof(int)
+        );
+    }
+
     if (bvh->nodos == NULL ||
         bvh->indices == NULL ||
-        refs == NULL) {
+        refs == NULL ||
+        (bvh->num_restantes > 0 &&
+         bvh->indices_restantes == NULL)) {
 
         free(refs);
         bvh_liberar(bvh);
@@ -339,14 +351,19 @@ BVH *bvh_construir(const Escena *escena)
     }
 
     int posicion = 0;
+    int restante = 0;
 
-    /* Calcular las cajas de todos los poligonos */
+    /* Clasificar los objetos de la escena */
     for (int i = 0; i < escena->num_objetos; i++) {
 
         const Objeto *objeto = &escena->objetos[i];
 
-        if (objeto->tipo != TIPO_POLIGONO)
+        if (objeto->tipo != TIPO_POLIGONO) {
+
+            bvh->indices_restantes[restante++] = i;
+
             continue;
+        }
 
         refs[posicion].indice = i;
 
@@ -359,7 +376,7 @@ BVH *bvh_construir(const Escena *escena)
         posicion++;
     }
 
-    /* Construir el arbol desde la raiz */
+    /* Construir el arbol */
     bvh->raiz = construir_nodo(
         bvh,
         refs,
@@ -379,6 +396,7 @@ void bvh_liberar(BVH *bvh)
 
     free(bvh->nodos);
     free(bvh->indices);
+    free(bvh->indices_restantes);
 
     free(bvh);
 }

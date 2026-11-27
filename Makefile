@@ -1,6 +1,8 @@
 CC = gcc
 CFLAGS = -std=c11 -O2 -Wall -Wextra -Wpedantic
 LDLIBS = -lm
+CFLAGS += -fopenmp
+LDLIBS += -fopenmp
 MOTOR_OBJS = escena.o vectores.o poligonos.o discos.o elipses.o cilindros.o conos.o cortes.o ecuaciones.o cuadraticas.o texturas.o antialiasing.o raytracing.o bvh.o
 OBJS = main.o $(MOTOR_OBJS) framebuffer.o
 BIN = raytracing

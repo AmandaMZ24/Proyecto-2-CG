@@ -28,6 +28,11 @@ typedef struct BVH {
     int num_nodos;
     int num_indices;
     int raiz;
+
+    /* Primitivas que no pertenecen al BVH */
+    int *indices_restantes;
+    int num_restantes;
+
 } BVH;
 
 /* Construccion y liberacion */

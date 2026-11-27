@@ -507,20 +507,21 @@ static int primera_interseccion(
         );
     }
 
-    /* Evaluar las primitivas restantes */
-    for (int i = 0; i < escena->num_objetos; i++) {
+/* Evaluar solamente las primitivas restantes */
+int cantidad = escena->bvh != NULL
+    ? escena->bvh->num_restantes
+    : escena->num_objetos;
 
-        if (i == ignorado)
-            continue;
+for (int j = 0; j < cantidad; j++) {
 
-        /* Los poligonos ya fueron evaluados */
-        if (escena->bvh != NULL &&
-            escena->objetos[i].tipo == TIPO_POLIGONO) {
+    int i = escena->bvh != NULL
+        ? escena->bvh->indices_restantes[j]
+        : j;
 
-            continue;
-        }
+    if (i == ignorado)
+        continue;
 
-        double t_actual = 0.0;
+    double t_actual = 0.0;
 
         if (intersecar_objeto(
                 &escena->objetos[i],
@@ -854,15 +855,17 @@ static double factor_sombra(
     }
 
     /* Sombras de las otras primitivas */
-    for (int i = 0; i < escena->num_objetos; i++) {
+int cantidad = escena->bvh != NULL
+    ? escena->bvh->num_restantes
+    : escena->num_objetos;
 
-        if (escena->bvh != NULL &&
-            escena->objetos[i].tipo == TIPO_POLIGONO) {
+for (int j = 0; j < cantidad; j++) {
 
-            continue;
-        }
+    int i = escena->bvh != NULL
+        ? escena->bvh->indices_restantes[j]
+        : j;
 
-        double t = 0.0;
+    double t = 0.0;
 
         if (!intersecar_objeto(
                 &escena->objetos[i],

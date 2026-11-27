@@ -3,6 +3,8 @@
 #include <stdio.h>
 #include <stdint.h>
 #include <time.h>
+#include <stdlib.h>
+#include <omp.h>
 
 /* Tiempo real transcurrido, en segundos (C11). */
 static double tiempo_actual(void){
@@ -66,38 +68,101 @@ int guardar_avs(const char *ruta, const Escena *escena){
     fflush(stderr);
 
     /* Generar y escribir cada pixel */
-    for (int y = 0; correcto && y < escena->alto; y++){
-        for (int x = 0; x < escena->ancho; x++){
-            Color color = trazar_pixel(escena, x, y);
-            unsigned char pixel[4] = {
-                255,
-                a_byte(color.r),
-                a_byte(color.g),
-                a_byte(color.b)
-            };
+    /* Reservar memoria para la imagen completa */
+size_t cantidad_bytes =
+    (size_t)ancho * alto * 4;
 
-            if (fwrite(pixel, 1, sizeof(pixel), archivo)!= sizeof(pixel)){
-                correcto = 0;
-                break;
-            }
+unsigned char *imagen = correcto
+    ? malloc(cantidad_bytes)
+    : NULL;
+
+if (imagen == NULL) {
+
+    correcto = 0;
+
+} else {
+
+    int filas_terminadas = 0;
+
+    /* Renderizado paralelo por filas */
+    #pragma omp parallel for schedule(dynamic, 1)
+    for (int y = 0; y < escena->alto; y++) {
+
+        for (int x = 0; x < escena->ancho; x++) {
+
+            Color color = trazar_pixel(
+                escena,
+                x,
+                y
+            );
+
+            size_t indice =
+                ((size_t)y * ancho + x) * 4;
+
+            imagen[indice] = 255;
+
+            imagen[indice + 1] =
+                a_byte(color.r);
+
+            imagen[indice + 2] =
+                a_byte(color.g);
+
+            imagen[indice + 3] =
+                a_byte(color.b);
         }
 
-        if (correcto){
-            int filas = y + 1;
-            int porcentaje = (int)(100.0 * filas / escena->alto);
-            if (porcentaje != ultimo_porcentaje){
-                double transcurrido = tiempo_actual() - inicio;
-                double restante = filas > 0
-                    ? transcurrido * (escena->alto - filas) / filas : 0.0;
-                fprintf(stderr,
-                        "\rAvance: %3d%% | %d/%d filas | Transcurrido: %.0f s | Restante aprox.: %.0f s   ",
-                        porcentaje, filas, escena->alto, transcurrido, restante);
+        /* Actualizar el progreso de forma segura */
+        #pragma omp critical
+        {
+            filas_terminadas++;
+
+            int porcentaje = (int)(
+                100.0 * filas_terminadas /
+                escena->alto
+            );
+
+            if (porcentaje != ultimo_porcentaje) {
+
+                double transcurrido =
+                    tiempo_actual() - inicio;
+
+                double restante =
+                    transcurrido *
+                    (escena->alto - filas_terminadas) /
+                    filas_terminadas;
+
+                fprintf(
+                    stderr,
+                    "\rAvance: %3d%% | %d/%d filas | "
+                    "Transcurrido: %.0f s | "
+                    "Restante aprox.: %.0f s   ",
+                    porcentaje,
+                    filas_terminadas,
+                    escena->alto,
+                    transcurrido,
+                    restante
+                );
+
                 fflush(stderr);
+
                 ultimo_porcentaje = porcentaje;
             }
         }
     }
-    fprintf(stderr, "\n");
+
+    /* Guardar los pixeles en el orden correcto */
+    if (fwrite(
+            imagen,
+            1,
+            cantidad_bytes,
+            archivo
+        ) != cantidad_bytes) {
+
+        correcto = 0;
+    }
+
+    free(imagen);
+}
 
     /* Comprobar que el archivo se cierre correctamente */
     if (fclose(archivo) != 0){
