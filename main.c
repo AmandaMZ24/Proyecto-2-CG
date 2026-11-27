@@ -18,6 +18,7 @@
 
 #include "escena.h"
 #include "framebuffer.h"
+#include "bvh.h"
 
 /*
  * Decide si debe abrirse ImageMagick: solo si hay un entorno grafico
@@ -43,6 +44,8 @@ int main(int argc, char **argv) {
         escena_liberar(&escena);
         return EXIT_FAILURE;
     }
+
+    escena.bvh = bvh_construir(&escena);
     
     /* Generar y guardar la imagen AVS */
     int ok = guardar_avs(salida, &escena);

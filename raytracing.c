@@ -15,6 +15,7 @@
 #include "ecuaciones.h"
 #include "texturas.h"
 #include "antialiasing.h"
+#include "bvh.h"
 /*
  * Desplazamiento del origen de los rayos de sombra, reflejados y
  * transparentes respecto a la superficie. Evita la auto-interseccion
@@ -379,6 +380,90 @@ static int intersecar_objeto(
     return 0;
 }
 
+static void recorrer_bvh(
+    const Escena *escena,
+    int indice_nodo,
+    Vec3 origen,
+    Vec3 direccion,
+    int ignorado,
+    int *mejor_i,
+    double *mejor_t
+)
+{
+    if (indice_nodo < 0)
+        return;
+
+    const BVH *bvh = escena->bvh;
+
+    const NodoBVH *nodo =
+        &bvh->nodos[indice_nodo];
+
+    /* Descartar toda la rama si el rayo
+       no intersecta la caja */
+    if (!aabb_intersecar(
+            &nodo->caja,
+            origen,
+            direccion,
+            1e-9,
+            *mejor_t)) {
+
+        return;
+    }
+
+    /* Nodo hoja */
+    if (nodo->cantidad > 0) {
+
+        for (int j = nodo->inicio;
+             j < nodo->inicio + nodo->cantidad;
+             j++) {
+
+            int i = bvh->indices[j];
+
+            if (i == ignorado)
+                continue;
+
+            double t_actual = 0.0;
+
+            if (intersecar_objeto(
+                    &escena->objetos[i],
+                    origen,
+                    direccion,
+                    &t_actual) &&
+                t_actual > 1e-9 &&
+                (t_actual < *mejor_t ||
+                 (t_actual == *mejor_t &&
+                  (*mejor_i < 0 || i < *mejor_i)))) {
+
+                *mejor_t = t_actual;
+                *mejor_i = i;
+            }
+        }
+
+        return;
+    }
+
+    /* Recorrer los hijos */
+    recorrer_bvh(
+        escena,
+        nodo->izquierdo,
+        origen,
+        direccion,
+        ignorado,
+        mejor_i,
+        mejor_t
+    );
+
+    recorrer_bvh(
+        escena,
+        nodo->derecho,
+        origen,
+        direccion,
+        ignorado,
+        mejor_i,
+        mejor_t
+    );
+}
+
 /* ================================================================== */
 /*  FIRST_INTERSECTION: objeto mas cercano golpeado por un rayo        */
 /* ================================================================== */
@@ -389,46 +474,77 @@ static int intersecar_objeto(
  * rayo de transparencia atraviese el objeto del que sale sin volver
  * a golpear su cara trasera.
  */
-static int primera_interseccion(const Escena *escena, Vec3 origen,
-                                Vec3 direccion, int ignorado,
-                                int *indice, double *t)
+static int primera_interseccion(
+    const Escena *escena,
+    Vec3 origen,
+    Vec3 direccion,
+    int ignorado,
+    int *indice,
+    double *t
+)
 {
     double mejor_t = DBL_MAX;
-    int    mejor_i = -1;
+    int mejor_i = -1;
 
-    if (escena == NULL || escena->objetos == NULL ||
+    if (escena == NULL ||
+        escena->objetos == NULL ||
         escena->num_objetos <= 0) {
+
         return 0;
     }
 
-    for (int i = 0; i < escena->num_objetos; ++i)
-    {
-        double t_actual = 0.0;
+    /* Buscar poligonos utilizando BVH */
+    if (escena->bvh != NULL) {
 
-        if (i == ignorado) {
+        recorrer_bvh(
+            escena,
+            escena->bvh->raiz,
+            origen,
+            direccion,
+            ignorado,
+            &mejor_i,
+            &mejor_t
+        );
+    }
+
+    /* Evaluar las primitivas restantes */
+    for (int i = 0; i < escena->num_objetos; i++) {
+
+        if (i == ignorado)
+            continue;
+
+        /* Los poligonos ya fueron evaluados */
+        if (escena->bvh != NULL &&
+            escena->objetos[i].tipo == TIPO_POLIGONO) {
+
             continue;
         }
 
-        if (intersecar_objeto(&escena->objetos[i], origen, direccion,
-                              &t_actual) &&
+        double t_actual = 0.0;
+
+        if (intersecar_objeto(
+                &escena->objetos[i],
+                origen,
+                direccion,
+                &t_actual) &&
             t_actual > 1e-9 &&
-            t_actual < mejor_t)
-        {
+            (t_actual < mejor_t ||
+             (t_actual == mejor_t &&
+              (mejor_i < 0 || i < mejor_i)))) {
+
             mejor_t = t_actual;
             mejor_i = i;
         }
     }
 
-    if (mejor_i < 0) {
+    if (mejor_i < 0)
         return 0;
-    }
 
-    if (indice != NULL) {
+    if (indice != NULL)
         *indice = mejor_i;
-    }
-    if (t != NULL) {
+
+    if (t != NULL)
         *t = mejor_t;
-    }
 
     return 1;
 }
@@ -596,6 +712,93 @@ static Material material_de(const Objeto *objeto)
     }
 }
 
+static double sombra_bvh(
+    const Escena *escena,
+    int indice_nodo,
+    Vec3 origen,
+    Vec3 direccion,
+    double distancia_maxima
+)
+{
+    if (indice_nodo < 0)
+        return 1.0;
+
+    const BVH *bvh = escena->bvh;
+
+    const NodoBVH *nodo =
+        &bvh->nodos[indice_nodo];
+
+    if (!aabb_intersecar(
+            &nodo->caja,
+            origen,
+            direccion,
+            1e-9,
+            distancia_maxima)) {
+
+        return 1.0;
+    }
+
+    /* Nodo hoja */
+    if (nodo->cantidad > 0) {
+
+        double transmision = 1.0;
+
+        for (int j = nodo->inicio;
+             j < nodo->inicio + nodo->cantidad;
+             j++) {
+
+            int i = bvh->indices[j];
+
+            double t = 0.0;
+
+            if (!intersecar_objeto(
+                    &escena->objetos[i],
+                    origen,
+                    direccion,
+                    &t) ||
+                t <= 1e-9 ||
+                t >= distancia_maxima) {
+
+                continue;
+            }
+
+            double transparencia =
+                material_de(
+                    &escena->objetos[i]
+                ).transparencia;
+
+            transmision *=
+                fmin(1.0, fmax(0.0, transparencia));
+
+            if (transmision <= 0.0)
+                return 0.0;
+        }
+
+        return transmision;
+    }
+
+    double izquierda = sombra_bvh(
+        escena,
+        nodo->izquierdo,
+        origen,
+        direccion,
+        distancia_maxima
+    );
+
+    if (izquierda <= 0.0)
+        return 0.0;
+
+    double derecha = sombra_bvh(
+        escena,
+        nodo->derecho,
+        origen,
+        direccion,
+        distancia_maxima
+    );
+
+    return izquierda * derecha;
+}
+
 /*
  * Devuelve la fraccion de luz que llega al punto desde una fuente:
  *
@@ -607,34 +810,81 @@ static Material material_de(const Objeto *objeto)
  * Se lanza un rayo de sombra desde un punto ligeramente desplazado
  * hacia afuera a lo largo de la normal, en la direccion de la luz.
  */
-static double factor_sombra(const Escena *escena, Vec3 punto, Vec3 normal,
-                            Vec3 direccion_luz, double distancia_luz)
+static double factor_sombra(
+    const Escena *escena,
+    Vec3 punto,
+    Vec3 normal,
+    Vec3 direccion_luz,
+    double distancia_luz
+)
 {
-    Vec3 origen = vec_sumar(punto, vec_escalar(normal, EPSILON_SUPERFICIE));
+    Vec3 origen = vec_sumar(
+        punto,
+        vec_escalar(
+            normal,
+            EPSILON_SUPERFICIE
+        )
+    );
+
     double transmision = 1.0;
 
-    if (escena == NULL || escena->objetos == NULL || escena->num_objetos <= 0) {
+    if (escena == NULL ||
+        escena->objetos == NULL ||
+        escena->num_objetos <= 0) {
+
         return transmision;
     }
 
-    /* Cada objeto entre el punto y la luz atenúa la contribución. */
-    for (int i = 0; i < escena->num_objetos; ++i)
-    {
-        double t = 0.0;
+    double distancia_maxima =
+        distancia_luz - EPSILON_SUPERFICIE;
 
-        if (!intersecar_objeto(&escena->objetos[i], origen,
-                               direccion_luz, &t) ||
-            t <= 1e-9 || t >= distancia_luz - EPSILON_SUPERFICIE)
-        {
+    /* Sombras producidas por poligonos */
+    if (escena->bvh != NULL) {
+
+        transmision = sombra_bvh(
+            escena,
+            escena->bvh->raiz,
+            origen,
+            direccion_luz,
+            distancia_maxima
+        );
+
+        if (transmision <= 0.0)
+            return 0.0;
+    }
+
+    /* Sombras de las otras primitivas */
+    for (int i = 0; i < escena->num_objetos; i++) {
+
+        if (escena->bvh != NULL &&
+            escena->objetos[i].tipo == TIPO_POLIGONO) {
+
             continue;
         }
 
-        double transparencia = material_de(&escena->objetos[i]).transparencia;
-        transmision *= fmin(1.0, fmax(0.0, transparencia));
+        double t = 0.0;
 
-        if (transmision <= 0.0) {
-            return 0.0;
+        if (!intersecar_objeto(
+                &escena->objetos[i],
+                origen,
+                direccion_luz,
+                &t) ||
+            t <= 1e-9 ||
+            t >= distancia_maxima) {
+
+            continue;
         }
+
+        double transparencia =
+            material_de(
+                &escena->objetos[i]
+            ).transparencia;
+
+        transmision *=
+            fmin(1.0, fmax(0.0, transparencia));
+
+        if (transmision <= 0.0)
+            return 0.0;
     }
 
     return transmision;

@@ -9,6 +9,7 @@
 #include "poligonos.h"
 #include "vectores.h"
 #include "texturas.h"
+#include "bvh.h"
 
 #include <ctype.h>
 #include <errno.h>
@@ -66,6 +67,8 @@ void escena_inicializar(Escena *escena)
     escena->cap_texturas = 0;
 
     escena->antialiasing = 1;
+
+    escena->bvh = NULL;
 
     escena->cap_luces = 4;
     escena->num_luces = 0;
@@ -2471,6 +2474,9 @@ void escena_liberar(Escena *escena)
     {
         return;
     }
+
+    bvh_liberar(escena->bvh);
+    escena->bvh = NULL;
 
     /*
      * Liberar la memoria de los vertices

@@ -208,6 +208,7 @@ typedef struct {
 
 } Objeto;
 
+struct BVH;
 /* ------------------------------------------------------------------ */
 /* Escena                                                              */
 /* ------------------------------------------------------------------ */
@@ -250,6 +251,7 @@ typedef struct {
     int cap_texturas;
     
     int antialiasing; /* 0 = desactivado, 1 = activado */
+    struct BVH *bvh;
 
     char error[256];      /* descripcion del ultimo error de lectura */
 } Escena;
