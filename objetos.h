@@ -202,6 +202,9 @@ typedef struct {
     int textura;
     Vec3 textura_g;
     Vec3 textura_norte;
+    /* Coordenadas UV explicitas para triangulos */
+    int tiene_uv;
+    double uv[3][2];
 
 } Objeto;
 

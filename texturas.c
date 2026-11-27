@@ -158,6 +158,80 @@ Color color_textura(
     return color;
 }
 
+static int uv_triangulo(
+    Vec3 punto,
+    const Objeto *objeto,
+    double *u,
+    double *v
+)
+{
+    if (objeto == NULL ||
+        objeto->tipo != TIPO_POLIGONO ||
+        objeto->u.poligono.num_vertices != 3 ||
+        !objeto->tiene_uv ||
+        u == NULL ||
+        v == NULL) {
+
+        return 0;
+    }
+
+    const Poligono *p =
+        &objeto->u.poligono;
+
+    Vec3 A = p->vertices[0];
+    Vec3 B = p->vertices[1];
+    Vec3 C = p->vertices[2];
+
+    /* Vectores del triangulo */
+    Vec3 AB = vec_restar(B, A);
+    Vec3 AC = vec_restar(C, A);
+    Vec3 AP = vec_restar(punto, A);
+
+    /* Productos punto */
+    double d00 = vec_punto(AB, AB);
+    double d01 = vec_punto(AB, AC);
+    double d11 = vec_punto(AC, AC);
+    double d20 = vec_punto(AP, AB);
+    double d21 = vec_punto(AP, AC);
+
+    double denominador =
+        d00 * d11 - d01 * d01;
+
+    /* Evitar triangulos degenerados */
+    if (d00 <= 0.0 ||
+        d11 <= 0.0 ||
+        denominador <= 1e-12 * d00 * d11) {
+
+        return 0;
+    }
+
+    /* Coordenadas baricentricas */
+    double beta =
+        (d11 * d20 - d01 * d21) /
+        denominador;
+
+    double gamma =
+        (d00 * d21 - d01 * d20) /
+        denominador;
+
+    double alpha =
+        1.0 - beta - gamma;
+
+    /* Interpolar coordenadas U */
+    *u =
+        alpha * objeto->uv[0][0] +
+        beta  * objeto->uv[1][0] +
+        gamma * objeto->uv[2][0];
+
+    /* Interpolar coordenadas V */
+    *v =
+        alpha * objeto->uv[0][1] +
+        beta  * objeto->uv[1][1] +
+        gamma * objeto->uv[2][1];
+
+    return isfinite(*u) && isfinite(*v);
+}
+
 int uv_poligono(
     Vec3 punto,
     const Poligono *poligono,
@@ -451,15 +525,29 @@ Color color_superficie(
     switch (objeto->tipo) {
 
         case TIPO_POLIGONO:
+        
+            if (objeto->tiene_uv) {
 
-            valido = uv_poligono(
-                punto,
-                &objeto->u.poligono,
-                &u,
-                &v
-            );
+        /* Mapeo UV explicito */
+        valido = uv_triangulo(
+            punto,
+            objeto,
+            &u,
+            &v
+        );
 
-            break;
+    } else {
+
+        /* Mapeo automatico original */
+        valido = uv_poligono(
+            punto,
+            &objeto->u.poligono,
+            &u,
+            &v
+        );
+    }
+
+    break;
 
         case TIPO_CILINDRO:
 

@@ -319,6 +319,8 @@ int escena_agregar_esfera(Escena *escena, Vec3 centro, double radio,
     nuevo->textura = 0;
     nuevo->textura_g = (Vec3){1.0, 0.0, 0.0};
     nuevo->textura_norte = (Vec3){0.0, 1.0, 0.0};
+    nuevo->tiene_uv = 0;
+    memset(nuevo->uv, 0, sizeof(nuevo->uv));
     nuevo->num_planos_corte = 0;
     nuevo->u.esfera.centro = centro;
     nuevo->u.esfera.radio  = radio;
@@ -420,6 +422,8 @@ int escena_agregar_poligono(
     nuevo->textura = 0;
     nuevo->textura_g = (Vec3){1.0, 0.0, 0.0};
     nuevo->textura_norte = (Vec3){0.0, 1.0, 0.0};
+    nuevo->tiene_uv = 0;
+    memset(nuevo->uv, 0, sizeof(nuevo->uv));
     nuevo->num_planos_corte = 0;
     nuevo->u.poligono.vertices = copia;
     nuevo->u.poligono.num_vertices = num_vertices;
@@ -462,6 +466,8 @@ int escena_agregar_disco(
     nuevo->textura = 0;
     nuevo->textura_g = (Vec3){1.0, 0.0, 0.0};
     nuevo->textura_norte = (Vec3){0.0, 1.0, 0.0};
+    nuevo->tiene_uv = 0;
+    memset(nuevo->uv, 0, sizeof(nuevo->uv));
     nuevo->num_planos_corte = 0;
     nuevo->u.disco.centro = centro;
     nuevo->u.disco.normal = vec_normalizar(normal);
@@ -521,6 +527,8 @@ int escena_agregar_elipse(
     nuevo->textura = 0;
     nuevo->textura_g = (Vec3){1.0, 0.0, 0.0};
     nuevo->textura_norte = (Vec3){0.0, 1.0, 0.0};
+    nuevo->tiene_uv = 0;
+    memset(nuevo->uv, 0, sizeof(nuevo->uv));
     nuevo->num_planos_corte = 0;
     nuevo->u.elipse.foco1 = foco1;
     nuevo->u.elipse.foco2 = foco2;
@@ -569,6 +577,8 @@ int escena_agregar_cilindro(
     nuevo->textura = 0;
     nuevo->textura_g = (Vec3){1.0, 0.0, 0.0};
     nuevo->textura_norte = (Vec3){0.0, 1.0, 0.0};
+    nuevo->tiene_uv = 0;
+    memset(nuevo->uv, 0, sizeof(nuevo->uv));
     nuevo->num_planos_corte = 0;
     nuevo->u.cilindro.ancla = ancla;
     nuevo->u.cilindro.eje = vec_normalizar(eje);
@@ -621,6 +631,8 @@ int escena_agregar_cono(
     nuevo->textura = 0;
     nuevo->textura_g = (Vec3){1.0, 0.0, 0.0};
     nuevo->textura_norte = (Vec3){0.0, 1.0, 0.0};
+    nuevo->tiene_uv = 0;
+    memset(nuevo->uv, 0, sizeof(nuevo->uv));
     nuevo->num_planos_corte = 0;
     nuevo->u.cono.vertice = vertice;
     nuevo->u.cono.eje = vec_normalizar(eje);
@@ -690,6 +702,8 @@ int escena_agregar_cuadratica(
     nuevo->textura = 0;
     nuevo->textura_g = (Vec3){1.0, 0.0, 0.0};
     nuevo->textura_norte = (Vec3){0.0, 1.0, 0.0};
+    nuevo->tiene_uv = 0;
+    memset(nuevo->uv, 0, sizeof(nuevo->uv));
     nuevo->u.cuadratica = superficie;
 
     escena->num_objetos++;
@@ -1645,6 +1659,73 @@ static int leer_textura(
     return 1;
 }
 
+static int leer_textura_uv(
+    Escena *e,
+    char *tokens[],
+    int n,
+    int linea,
+    const char *nombre
+)
+{
+    double valores[6];
+
+    if (n != 7) {
+        fijar_error(
+            e, linea, nombre,
+            "textura_uv espera seis coordenadas"
+        );
+
+        return 0;
+    }
+
+    if (e->num_objetos <= 0) {
+        fijar_error(
+            e, linea, nombre,
+            "no existe un objeto para aplicar UV"
+        );
+
+        return 0;
+    }
+
+    Objeto *ultimo =
+        &e->objetos[e->num_objetos - 1];
+
+    if (ultimo->tipo != TIPO_POLIGONO ||
+        ultimo->u.poligono.num_vertices != 3) {
+
+        fijar_error(
+            e, linea, nombre,
+            "textura_uv requiere un triangulo"
+        );
+
+        return 0;
+    }
+
+    for (int i = 0; i < 6; i++) {
+
+        if (!a_doble(tokens[i + 1], &valores[i]) ||
+            !isfinite(valores[i])) {
+
+            fijar_error(
+                e, linea, nombre,
+                "coordenadas UV invalidas"
+            );
+
+            return 0;
+        }
+    }
+
+    for (int i = 0; i < 3; i++) {
+
+        ultimo->uv[i][0] = valores[i * 2];
+        ultimo->uv[i][1] = valores[i * 2 + 1];
+    }
+
+    ultimo->tiene_uv = 1;
+
+    return 1;
+}
+
 static int leer_textura_orientacion(
     Escena *e,
     char *tokens[],
@@ -2244,6 +2325,13 @@ int escena_leer_flujo(Escena *escena, FILE *flujo, const char *nombre)
 
         if (strcmp(tokens[0], "textura") == 0) {
             if (!leer_textura(escena, tokens, n, num_linea, nombre)) {
+                return 0;
+            }
+            continue;
+        }
+
+        if (strcmp(tokens[0], "textura_uv") == 0) {
+            if (!leer_textura_uv(escena, tokens, n, num_linea, nombre)) {
                 return 0;
             }
             continue;

@@ -1,0 +1,34 @@
+# Prueba de interpolacion UV baricentrica
+
+resolucion 650 380
+ojo 0 0 -5
+ventana -3.25 -1.9 3.25 1.9
+fondo 0.08 0.08 0.12
+ambiente 1.0
+antialiasing 1
+
+textura_cargar texturas/colores.avs
+
+# Esferas auxiliares fuera del campo visual
+esfera 100 0 5 0.1 0 0 0
+esfera 102 0 5 0.1 0 0 0
+esfera 104 0 5 0.1 0 0 0
+esfera 106 0 5 0.1 0 0 0
+esfera 108 0 5 0.1 0 0 0
+esfera 110 0 5 0.1 0 0 0
+esfera 112 0 5 0.1 0 0 0
+esfera 114 0 5 0.1 0 0 0
+
+# Primer triangulo
+poligono 3 -3 -2 3 3 -2 3 3 2 3 1 1 1
+material 1 0 0 1 0 0
+textura 1
+textura_uv 0 1 1 1 1 0
+
+# Segundo triangulo
+poligono 3 -3 -2 3 3 2 3 -3 2 3 1 1 1
+material 1 0 0 1 0 0
+textura 1
+textura_uv 0 1 1 0 0 0
+
+fin
