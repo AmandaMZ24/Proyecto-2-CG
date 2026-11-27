@@ -579,12 +579,25 @@ Color color_superficie(
     }
 
     if (!valido) {
-        return color_base;
+    return color_base;
+}
+
+/* Repeticion de texturas con coordenadas UV explicitas */
+if (objeto->tipo == TIPO_POLIGONO &&
+    objeto->tiene_uv) {
+
+    if (u < 0.0 || u > 1.0) {
+        u = u - floor(u);
     }
 
-    return color_textura(
-        textura,
-        u,
-        v
-    );
+    if (v < 0.0 || v > 1.0) {
+        v = v - floor(v);
+    }
+}
+
+return color_textura(
+    textura,
+    u,
+    v
+);
 }
